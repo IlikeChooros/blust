@@ -5,6 +5,51 @@
 using namespace blust;
 
 
+class MatrixFixture : public testing::Test
+{
+protected:
+    static constexpr int n_matrices = 1024;
+    static constexpr int m_size     = 512;
+    std::vector<matrix<int>> m;
+    std::vector<std::vector<int>> v;
+
+    void SetUp()
+    {
+        std::uniform_int_distribution<size_t> value_gen(-512, 512);
+        std::mt19937 rd(0x144258);
+
+        m.reserve(n_matrices);
+        v.reserve(n_matrices);
+
+        for (size_t i = 0; i < n_matrices; i++)
+        {
+            m.push_back(matrix<int>({m_size, m_size}));
+            v.push_back(std::vector<int>(m_size));
+    
+            const size_t size = m[i].size();
+            for (size_t j = 0; j < size; j++)
+                m[i](j) = value_gen(rd);
+            
+            for(size_t j = 0; j < v[i].size(); j++)
+                v[i][j] = value_gen(rd);
+        }
+    }
+};
+
+
+TEST_F(MatrixFixture, TestSpeedVectorMultiplication)
+{
+    for (size_t i = 0; i < n_matrices; i++)
+    {
+        auto r = m[i] * v[i];
+    }
+}
+
+TEST_F(MatrixFixture, TestTilesCorrectness)
+{
+    ASSERT_EQ(m[0] * m[1], m[0]._multip_tiles(m[1]));
+}
+
 TEST(Matrix, TestMultiplicationByConst)
 {
     matrix<int> m({
@@ -55,27 +100,4 @@ TEST(Matrix, TestMultiplyMatrixByVector)
     auto res = m * v;
     auto expect = std::vector<int>({25, 48});
     ASSERT_EQ(res, expect);
-}
-
-TEST(Matrix, SpeedTestVectorMultiplication)
-{
-    std::uniform_int_distribution<size_t> dist(2, 512);
-    std::mt19937 rd(0x144258);
-
-    for (size_t i = 0; i < 512; i++)
-    {
-        matrix<int> m({dist(rd), dist(rd)});
-        std::vector<int> v(m.cols());
-
-        const size_t size = m.size();
-        for (size_t i = 0; i < size; i++)
-            m(i) = dist(rd);
-        
-        for(size_t i = 0; i < v.size(); i++)
-            v[i] = dist(rd);
-        
-        auto r = m * v;
-
-        // ASSERT_TRUE(r.size() == m.rows());
-    }
 }

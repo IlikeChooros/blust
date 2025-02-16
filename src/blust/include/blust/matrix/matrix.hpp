@@ -32,9 +32,16 @@ class matrix
 {
 public:
     typedef dtype* pointer_t;
+    typedef const dtype* const_pointer_t;
 
     matrix() = default;
-    matrix(const matrix& other) { this->operator=<dtype>(other); }
+    matrix(const matrix& other) { *this = other; }
+
+    /**
+     * @brief Create a matrix (row x col) size, filled with `init_val`
+     * @param shape shape of the matrix...
+     * @param init_val value to fill up the matrix with
+     */
     matrix(shape2D shape, dtype init_val = 0)
     {
         static_assert(std::is_arithmetic<dtype>(), 
@@ -42,6 +49,7 @@ public:
         build(shape, init_val);
     }
 
+    // Setup 
     matrix(std::initializer_list<std::vector<dtype>> list)
     {
         M_alloc_buffer({list.size(), list.begin()->size()});
@@ -55,24 +63,28 @@ public:
         }
     }
 
+    // Create matrix from a flat vector
+    matrix(shape2D shape, std::vector<dtype>& v)
+    {
+        m_rows   = shape.x;
+        m_cols   = shape.y;
+        m_matrix = std::move(v);
+    }
+
+    matrix& operator=(const matrix& other)
+    {
+        return (this->operator=<dtype>(other));
+    }
+
     /**
      * @brief Copy operator
      */
     template <typename T>
     matrix& operator=(const matrix<T>& other)
     {
-        if (!(m_cols == other.cols() && m_rows == other.rows()))
-            M_alloc_buffer({other.rows(), other.cols()});
-        
-        if constexpr (std::is_same<dtype, T>())
-        {
-            if (data() != other.data())
-                std::copy_n(other.data(), other.size(), data());
-        }
-        else
-        {
-            std::copy_n(other.data(), other.size(), data());
-        }
+        m_rows   = other.m_rows;
+        m_cols   = other.m_cols;
+        m_matrix = other.m_matrix;
         return *this;
     }
 
@@ -83,9 +95,7 @@ public:
      */
     inline void build(shape2D shape, dtype init = 0)
     {
-        M_alloc_buffer(shape);
-        for (size_t i = 0; i < size(); ++i)
-            m_matrix[i] = init;
+        M_alloc_buffer(shape, init);
     }
 
     // Get the total size of the buffer
@@ -101,10 +111,11 @@ public:
     inline shape2D dim() const { return {rows(), cols()}; }
 
     // Get the raw pointer
-    inline pointer_t data() const { return m_matrix.get(); }
+    inline const_pointer_t data() const { return m_matrix.data(); }
+    inline pointer_t data() { return m_matrix.data(); }
 
     // Get transposed matrix 
-    matrix T() 
+    matrix T()
     {
         matrix m({m_cols, m_rows});
         const auto s = size();
@@ -118,15 +129,18 @@ public:
     }
 
     // Get the value at (row, column)
-    dtype& operator()(size_t r, size_t c) const { return m_matrix[r * m_cols + c]; }
-    dtype& operator()(size_t i) const { return m_matrix[i]; }
+    dtype& operator()(size_t r, size_t c) { return m_matrix[r * m_cols + c]; }
+    const dtype& operator()(size_t r, size_t c) const { return m_matrix[r * m_cols + c]; }
+
+    dtype& operator()(size_t i) { return m_matrix[i]; }
+    const dtype& operator()(size_t i) const { return m_matrix[i]; }
 
     // Get the whole row as vector
-    std::vector<dtype> operator[](size_t r) 
+    std::vector<dtype> operator[](size_t r) const
     { 
         return std::vector<dtype>(
-            m_matrix.get() + (r * m_cols), 
-            m_matrix.get() + ((r + 1) * m_cols)); 
+            m_matrix.begin() + (r * m_cols), 
+            m_matrix.begin() + ((r + 1) * m_cols)); 
     }
 
     // Compare the matrices
@@ -136,9 +150,9 @@ public:
         if (!(rhs.rows() == lhs.rows() && rhs.cols() == lhs.cols()))
             return false;
         
-        auto rb = lhs.m_matrix.get(), 
-             re = lhs.m_matrix.get() + lhs.size();
-        auto lb = rhs.m_matrix.get();
+        auto rb = lhs.data(), 
+             re = lhs.data() + lhs.size();
+        auto lb = rhs.data();
         return std::equal(rb, re, lb);
     }
 
@@ -146,11 +160,52 @@ public:
     template <typename T>
     friend matrix<dtype> operator*(matrix<dtype>& lhs, matrix<T>& rhs) { return lhs._multip(rhs); }
 
+        /**
+     * @brief Optimized multiplication for large matrices, matrix m must be 
+     * square matrix, and same size as this one
+     */
+    template<typename t>
+    matrix _multip_tiles(matrix<t>& m)
+    {
+        constexpr auto cache_size = 16 * (1 << 10);
+        constexpr int block_size = (cache_size / sizeof(double)) >> 5; 
+
+        if (!(cols() == m.rows()))
+            throw InvalidMatrixSize({m.rows(), m.cols()}, {cols(), m.cols()});
+        
+        matrix ret({rows(), m.cols()});
+
+        auto A = data();
+        auto B = m.data();
+        auto C = ret.data();
+        int N = m_rows;
+
+        for (int br = 0; br < N; br += block_size) {
+            for(int bc = 0; bc < N; bc += block_size) {
+                for (int bk = 0; bk < N; bk += block_size) {
+
+                    for (int c = 0; c < block_size; ++c) {
+                        for (int k = 0; k < block_size; ++k) {
+                            const dtype b_val = B[(bk + k) + (bc + c) * N];
+                            for (int r = 0; r < block_size; ++r) {
+                                C[(br + r) + (bc + c) * N] += 
+                                    A[(br + r) + (bk + k) * N] * b_val;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return ret;
+    }
+
     // Multiplication of matrix and vector (for simplification, vector is used as if it was vertical)
     // Resulting in vector (also vertical), of size matrix.rows (should be a matrix of dimensions: matrix.rows x 1) 
     template <typename T>
     friend std::vector<dtype> operator*(matrix<dtype>& lhs, std::vector<T>& rhs) { return lhs._multip_v<T, true>(rhs); }
 
+    // Multiply vector (1d matrix) by a matrix
     template <typename T>
     friend std::vector<dtype> operator*(std::vector<T>& lhs, matrix<dtype>& rhs) { return rhs._multip_v<T, false>(lhs); }
 
@@ -183,17 +238,17 @@ public:
 
 private:
 
-    std::unique_ptr<dtype[]> m_matrix;
+    std::vector<dtype> m_matrix;
     size_t m_rows;
     size_t m_cols;
 
 
     // Set the internal size and reallocate the buffer
-    void M_alloc_buffer(shape2D shape)
+    void M_alloc_buffer(shape2D shape, dtype init = 0)
     {
         m_rows = shape.x;
         m_cols = shape.y;
-        m_matrix.reset(new dtype[size()]);
+        m_matrix.resize(size(), init);
     }
 
     // dot product of given vectors, assumes the input is correct (v1.size == v2.size)
@@ -205,15 +260,18 @@ private:
         size_t i       = 0;
 
         // Unrolled
-        for (i = 0; i <= n - 4; i += 4)
+        if (n >= 4)
         {
-            dot += (v1[i]     * v2[i] +
-                    v1[i + 1] * v2[i + 1] +
-                    v1[i + 2] * v2[i + 2] +
-                    v1[i + 3] * v2[i + 3]
-            );
+            for (i = 0; i <= n - 4; i += 4)
+            {
+                dot += (v1[i]     * v2[i] +
+                        v1[i + 1] * v2[i + 1] +
+                        v1[i + 2] * v2[i + 2] +
+                        v1[i + 3] * v2[i + 3]
+                );
+            }
         }
-
+        
         for (; i < n; i++)
             dot += v1[i] * v2[i];
 
@@ -226,6 +284,7 @@ private:
     {
         if constexpr (MatrixFirst)
         {
+            // M * v, to make sense out of this, v is assumed to be vertical
             // Assert correct sizes
             if (!(cols() == v.size()))
                 throw InvalidMatrixSize({1, v.size()}, {1, cols()});
@@ -243,11 +302,14 @@ private:
         }
         else
         {
+            // v * M
             if (!(v.size() == rows()))
                 throw InvalidMatrixSize({v.size(), 1}, {rows(), 1});
             
             const size_t n_cols = cols();
             std::vector<dtype> result(n_cols, 0);
+
+            // Get the transposed matrix, for easier memory access
             auto transp = this->T();
 
             // Calculate the dot product for each row
@@ -275,7 +337,7 @@ private:
                      m_cols = m.cols(),
                      n_rows = rows();
         
-        matrix ret({n_rows, m_cols}); 
+        matrix ret({n_rows, m_cols});
 
         // re-order
         for (size_t r1 = 0; r1 < n_rows; r1++) // go through the rows of 1st matrix
@@ -286,24 +348,12 @@ private:
         return ret;
     }
 
-    template<typename t>
-    matrix _multip_tiles(matrix<t>& m)
-    {
-        constexpr auto cache_size = 16 * (1 << 10);
-        constexpr auto block_size = (cache_size / 2 / sizeof(double)) >> 5; 
-
-        if (!(cols() == m.rows()))
-            throw InvalidMatrixSize({m.rows(), m.cols()}, {cols(), m.cols()});
-        matrix ret({rows(), m.cols()});
-
-        return ret;
-    }
-
     // Multiply the matrix by a scalar
     template <typename t>
     matrix _multip_k(t k)
     {
-        static_assert(std::is_arithmetic<t>(), "Given type must be arithmetic (int, double, float, etc.)");
+        static_assert(std::is_arithmetic<t>(), 
+            "Given type must be arithmetic (int, double, float, etc.)");
 
         matrix m = *this;
 
