@@ -2,6 +2,7 @@
 
 #include "namespaces.hpp"
 
+#include <random>
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -31,7 +32,7 @@ namespace std
     }
 }
 
-START_BLUST_NAMEPSPACE
+START_BLUST_NAMESPACE
 namespace utils
 {
     
@@ -107,6 +108,22 @@ namespace utils
         static constexpr auto name = type_names::CexprTypeName<T>();
         return name.data();
     }
-    
+
+
+    /**
+     * @brief Initialize the `context` with random values (between +-1.0 / sqrt(input_size))
+     * @param context must support `begin()` and `end()` functions
+     */
+    template <typename _ForwardIterator>
+    void randomize(_ForwardIterator first, _ForwardIterator last, size_t input_size, uint64_t seed = 0x27)
+    {
+        const double limit = 1.0 / sqrt(input_size); 
+
+        std::uniform_real_distribution<double> dist(-limit, limit);
+        std::mt19937 eng(seed);
+
+        // Radomize all values
+        std::generate(first, last, [&dist, &eng](){ return dist(eng); });
+    }
 }
 END_BLUST_NAMESPACE

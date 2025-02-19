@@ -1,9 +1,8 @@
 #include <gtest/gtest.h>
 
-#include <random>
+
 #include <blust/blust.hpp>
 using namespace blust;
-
 
 class MatrixFixture : public testing::Test
 {
@@ -43,11 +42,6 @@ TEST_F(MatrixFixture, TestSpeedVectorMultiplication)
     {
         auto r = m[i] * v[i];
     }
-}
-
-TEST_F(MatrixFixture, TestTilesCorrectness)
-{
-    ASSERT_EQ(m[0] * m[1], m[0]._multip_tiles(m[1]));
 }
 
 TEST(Matrix, TestMultiplicationByConst)

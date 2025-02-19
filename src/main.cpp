@@ -1,62 +1,28 @@
 #include <blust/blust.hpp>
-#include <iostream>
-#include <random>
-#include <chrono>
 
 using namespace blust;
-static size_t n_matrices = 2048;
-constexpr int m_size     = 512;
 
-void run_test(std::unique_ptr<matrix<int>[]>& m, std::unique_ptr<std::vector<int>[]>& v)
+int main()
 {
-    for (size_t i = 0; i < n_matrices; i++)
-        auto r = m[i] * v[i];
-}
+    Output layer(2);
 
-int main(int argc, char** argv)
-{
-    if (argc == 2)
-        n_matrices = std::stoi(argv[1]);
+    matrix_t inputs({{1.0f, 0.0f}});
 
-    using namespace std::chrono;
+    layer.build(inputs.dim(), softmax);
+    layer.randomize();
 
-    auto setup_start = high_resolution_clock::now();
+    std::cout << "I: " << inputs << '\n';
+    std::cout << "W: " <<layer.get_weights() << '\n';
+    std::cout << "B: " <<layer.get_biases() << '\n';
 
-    std::unique_ptr<matrix<int>[]> m;
-    std::unique_ptr<std::vector<int>[]> v;
+    auto& outputs = layer.feed_forward(inputs);
 
-    std::uniform_int_distribution<size_t> dist(-8, 8);
-    std::mt19937 rd(0x144258);
+    std::cout << "WI:" << layer.get_weighted_input() << '\n';
 
-    m.reset(new matrix<int>[n_matrices]);
-    v.reset(new std::vector<int>[n_matrices]);
+    std::cout << "O: " << outputs << '\n';
 
-    for (size_t i = 0; i < n_matrices; i++)
-    {
-        m[i].build({m_size, m_size});
-        v[i].resize(m_size);
-
-        const size_t size = m[i].size();
-        for (size_t j = 0; j < size; j++)
-            m[i](j) = dist(rd);
-        
-        for(size_t j = 0; j < v[i].size(); j++)
-            v[i][j] = dist(rd);
-    }
-
-
-    auto start = high_resolution_clock::now();
-    // run_test(m, v);
-
-    auto r = m[0] * m[1];
-    auto r2 = m[0]._multip_tiles(m[1]);
-
-    std::cout << (r == r2) << "\n";
-
-    std::cout 
-    << "N: " << n_matrices 
-    << " setup time: " << duration_cast<milliseconds>(high_resolution_clock::now() - setup_start).count() << "ms "
-    <<  " exec time: " << duration_cast<milliseconds>(high_resolution_clock::now() - start).count() << "ms\n";
+    matrix_t expected({{0, 1}});
+    std::cout << "cost=" << layer.cost(expected) << '\n';
 
     return 0;
 }
