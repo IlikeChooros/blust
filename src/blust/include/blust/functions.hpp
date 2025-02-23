@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include "types.hpp"
 
 START_BLUST_NAMESPACE
@@ -71,7 +72,7 @@ public:
     {
         matrix_t mapped(activations);
         for (size_t i = 0; i < mapped.size(); ++i)
-            mapped(i) = int(mapped(i) > 0);
+            mapped(i) = number_t(mapped(i) > 0);
         return mapped;
     }
 };
@@ -84,7 +85,7 @@ public:
     {
         matrix_t mapped(weighted_input);
         for (size_t i = 0; i < mapped.size(); ++i)
-            mapped(i) = mapped(i) > 0 ? mapped(i) : 0;
+            mapped(i) = mapped(i) > 0 ? mapped(i) : .0f;
         return mapped;
     }
 
@@ -93,7 +94,7 @@ public:
     {
         matrix_t mapped(activations);
         for (size_t i = 0; i < mapped.size(); ++i)
-            mapped(i) = mapped(i) * (1.0 - mapped(i));
+            mapped(i) = mapped(i) * (1.0f - mapped(i));
         return mapped;
     }
 };
@@ -136,7 +137,7 @@ public:
     {
         matrix_t mapped(activations);
         for (size_t i = 0; i < mapped.size(); ++i)
-            mapped(i) = mapped(i) * (1.0 - mapped(i));
+            mapped(i) = mapped(i) * (1.0f - mapped(i));
         return mapped;
     }
 };
@@ -174,6 +175,7 @@ public:
 inline BaseErrorFunctor* get_error_functor(error_funcs type)
 {
     switch(type){
+    case mean_squared_error:
         default:
             return new MeanSquaredError();
     }
@@ -192,6 +194,7 @@ inline function_info get_functions(activations type)
             return {Sigmoid::activation, Sigmoid::derivative};
         case softmax:
             return {Softmax::activation, Softmax::derivative};
+        case relu:
         default:
             return {ReLU::activation, ReLU::derivative};
     }

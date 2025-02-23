@@ -54,9 +54,9 @@ public:
     typedef dtype* pointer_t;
     typedef const dtype* const_pointer_t;
 
-    matrix() = default;
+    matrix() : m_rows(0), m_cols(0) {}
     matrix(const matrix& other) { *this = other; }
-    matrix(matrix&& other) { *this = std::forward<matrix>(other); }
+    matrix(matrix&& other) noexcept { *this = std::forward<matrix>(other); }
 
     /**
      * @brief Create a matrix (row x col) size, filled with `init_val`
@@ -95,7 +95,7 @@ public:
         m_matrix = std::move(v);
     }
 
-    matrix& operator=(matrix&& other)
+    constexpr matrix& operator=(matrix&& other) noexcept
     {
         m_rows   = other.m_rows; 
         m_cols   = other.m_cols;
@@ -158,8 +158,8 @@ public:
         const auto s = size();
         for (size_t n = 0; n < s; ++n)
         {
-            int i = n / m_rows;
-            int j = n % m_rows;
+            size_t i = n / m_rows;
+            size_t j = n % m_rows;
             m.m_matrix[n] = m_matrix[m_cols*j + i];
         }
         return m;
@@ -548,8 +548,8 @@ private:
      * @throw May throw `InvalidMatrixSize` if this->cols() != m.rows()
      * @return Product matix (rows() x m.cols())
      */
-    template <typename t>
-    matrix M_multip(matrix<t>& m)
+    template <typename T = float>
+    matrix M_multip(matrix<T>& m)
     {
         M_assert_dim_mul(*this, m);
         

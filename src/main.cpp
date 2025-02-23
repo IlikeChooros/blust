@@ -4,7 +4,7 @@ using namespace blust;
 
 int main()
 {
-    Input input     = Input({1, 2});
+    Input input     = Input({ 1, 2 });
     Dense hidden    = Dense(4, relu)(input);
     Dense feature   = Dense(2, softmax)(hidden);
 
@@ -17,8 +17,8 @@ int main()
     model.compile(0.2);
 
     matrix_t expected{{0, 1}};
-    std::vector<matrix_t> batch_input = {inputs};
-    std::vector<matrix_t> batch_expected = {expected};
+    batch_t batch_input = {inputs};
+    batch_t batch_expected = {expected};
 
     model.compile(0.8);
     model.train_on_batch(batch_input, batch_expected);

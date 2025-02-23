@@ -8,7 +8,11 @@ START_BLUST_NAMESPACE
 class Input : public BaseLayer
 {
 public:
-    Input(shape2D shape) { m_output_shape = shape; }
+    Input(shape2D shape) { 
+        m_output_shape  = shape; 
+        m_output_size   = 0;
+        m_inputs_size   = 0;
+    }
 
     Input(const Input& other) : BaseLayer(other)
     {

@@ -2,6 +2,7 @@
 
 #include "namespaces.hpp"
 
+#include <string>
 #include <stdexcept>
 
 START_BLUST_NAMESPACE

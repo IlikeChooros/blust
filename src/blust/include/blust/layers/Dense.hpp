@@ -41,7 +41,7 @@ public:
         return *this;
     }
 
-    Dense(const Dense& other) : WeightedLayer(other) 
+    Dense(const Dense& other) : WeightedLayer(other)
     {
         m_biases        = other.m_biases;
         m_d_biases      = other.m_d_biases;

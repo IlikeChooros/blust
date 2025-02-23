@@ -36,10 +36,11 @@ TEST(LayerTest, TestBasicNetworkLearning)
     auto output     = feature.feed_forward(hidden_out);
 
     matrix_t expected{{1, 0, 0}};
+    error_functor_t loss(get_error_functor(mean_squared_error));
 
-    auto cost1 = feature.cost(expected);
+    auto cost1 = feature.cost(expected, loss);
 
-    feature.gradient(hidden_out, expected);
+    feature.gradient(hidden_out, expected, loss);
     hidden.gradient(inputs);
 
     // layer.apply(0.2);
@@ -50,5 +51,5 @@ TEST(LayerTest, TestBasicNetworkLearning)
 
     // Network should learn, minimizing the cost
     // cost1 > current cost
-    ASSERT_GT(cost1, feature.cost(expected));
+    ASSERT_GT(cost1, feature.cost(expected, loss));
 }
