@@ -186,10 +186,10 @@ public:
         if (!(rhs.rows() == lhs.rows() && rhs.cols() == lhs.cols()))
             return false;
         
-        auto rb = lhs.data(), 
-             re = lhs.data() + lhs.size();
-        auto lb = rhs.data();
-        return std::equal(rb, re, lb);
+        auto rb = rhs.data(), 
+             re = rhs.data() + rhs.size();
+        auto lb = lhs.data();
+        return std::equal(rb, re, lb, [](const number_t& r, const t& l) { return r - l < 1e-7; });
     }
 
     // Add 2 matrices

@@ -94,7 +94,7 @@ void cuda_backend::vector_scalar_mul(number_t* res, number_t* mat, number_t scal
 	void* args[] = { &deviceData1, &scalar, &deviceDataResult, &N};
 
     M_launch_kernel(cu_vector_mul_scalar, blocksPerGrid, args);
-	M_clean_up_cuda(res, false);
+	M_clean_up_cuda(res, N, false);
 }
 
 void cuda_backend::mat_transpose(number_t* res, number_t* mat, size_t rows, size_t cols)
@@ -106,7 +106,7 @@ void cuda_backend::mat_transpose(number_t* res, number_t* mat, size_t rows, size
 	void* args[] = { &deviceData1, &deviceDataResult, &rows, &cols };
 
     M_launch_kernel(cu_mat_transpose, blocksPerGrid, args);
-	M_clean_up_cuda(res, false);
+	M_clean_up_cuda(res, N, false);
 }
 
 void cuda_backend::mat_mul(number_t* res, number_t* mat1, number_t* mat2, size_t rows1, size_t cols2, size_t rows2)
@@ -114,8 +114,12 @@ void cuda_backend::mat_mul(number_t* res, number_t* mat1, number_t* mat2, size_t
 	size_t N = rows1 * cols2;
 	M_prepare_cuda(res, N, mat1, rows1 * rows2, mat2, rows2 * cols2);
 
-	std::pair<int, int> blockDim = { 16, 16 };
-	std::pair<int, int> gridDim = { 8, 8 };
+	constexpr int BLOCK_SIZE = 16;
+	std::pair<int, int> blockDim = { BLOCK_SIZE, BLOCK_SIZE };
+	std::pair<int, int> gridDim = {
+        (rows1 + BLOCK_SIZE - 1) / BLOCK_SIZE, 
+        (cols2 + BLOCK_SIZE - 1) / BLOCK_SIZE
+    };
 
 	void* args[] = { &deviceData1, &deviceData2, &deviceDataResult, &rows1, &cols2, &rows2 };
 
@@ -207,8 +211,6 @@ void cuda_backend::M_run_test() {
     // Grid/Block configuration
     int threadsPerBlock = 256;
     int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
-    //int blocksPerGrid = 32;
-
     void* args[] = { &deviceData1, &deviceData2, &deviceDataResult, &N };
 
     // Launch the CUDA kernel

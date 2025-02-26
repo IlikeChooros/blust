@@ -25,9 +25,18 @@ extern "C" __global__ void cu_vector_sub(pointer_t m1, pointer_t m2, pointer_t r
     size_t i      = threadIdx.x + blockDim.x * blockIdx.x;
     size_t stripe = blockDim.x * gridDim.x;
 
-#pragma unroll
-    for (; i < N; i+=stripe)
+    for (; i < N; i += stripe)
         res[i] = m1[i] - m2[i];
+}
+
+// Multiplies A * B, such that Cij = Aij * Bij
+extern "C" __global__ void cu_vector_mul_hadamard(pointer_t m1, pointer_t m2, pointer_t res, size_t N)
+{
+    size_t i = threadIdx.x + blockDim.x * blockIdx.x;
+    size_t stripe = blockDim.x * gridDim.x;
+
+    for (; i < N; i += stripe)
+        res[i] = m1[i] * m2[i];
 }
 
 // Multiply a vector by a scalar, and store the result in `res` (Bij = Aij * scalar)
@@ -39,17 +48,6 @@ extern "C" __global__ void cu_vector_mul_scalar(pointer_t m, cu_number_t scalar,
 	for (; i < N; i += stripe)
 		res[i] = m[i] * scalar;
 }
-
-// Multiplies A * B, such that Cij = Aij * Bij
-extern "C" __global__ void cu_vector_mul_hadamard(pointer_t m1, pointer_t m2, size_t N)
-{
-    size_t i      = threadIdx.x + blockDim.x * blockIdx.x;
-    size_t stripe = blockDim.x * gridDim.x;
-
-    for (; i < N; i+=stripe)
-        m1[i] *= m2[i];
-}
-
 
 // MATRIX OPERATIONS
 
@@ -78,16 +76,11 @@ extern "C" __global__ void cu_mat_mul(pointer_t m1, pointer_t m2, pointer_t res,
 	size_t row = blockIdx.y * blockDim.y + threadIdx.y;
 	size_t col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    size_t stripe_x = blockDim.x * gridDim.x;
-    size_t stripe_y = blockDim.y * gridDim.y;
-
 	// Check if the current thread is within the matrix bounds
-    for (; row < target_rows && col < target_cols; 
-            row += stripe_x, 
-            col += stripe_y)
+    if (row < target_rows && col < target_cols)
     {
-        cu_number_t sum = 0;
-#pragma unroll
+		cu_number_t sum = 0;
+
 		for (size_t i = 0; i < m2_rows; i++)
 			sum += m1[row * m2_rows + i] * m2[i * m2_cols + col];
 

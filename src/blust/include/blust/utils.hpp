@@ -117,10 +117,11 @@ namespace utils
     template <typename _ForwardIterator>
     void randomize(_ForwardIterator first, _ForwardIterator last, size_t input_size, uint64_t seed = 0x27)
     {
-        const double limit = 1.0 / sqrt(input_size); 
+        const number_t limit = 1.0 / sqrt(input_size); 
+		static int counter = 0;
 
-        std::uniform_real_distribution<double> dist(-limit, limit);
-        std::mt19937 eng(seed);
+        std::uniform_real_distribution<number_t> dist(-limit, limit);
+		std::mt19937 eng(seed + counter++);
 
         // Radomize all values
         std::generate(first, last, [&dist, &eng](){ return dist(eng); });

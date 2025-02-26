@@ -86,7 +86,7 @@ public:
 	// Subtract `mat2` from `mat1` and store the result in `res` (Rij = M1ij - M2ij)
 	void vector_sub(number_t* res, number_t* mat1, number_t* mat2, size_t N) override
 	{
-		M_lanuch_vector_like_kernel(res, mat1, mat2, N, cu_vector_add);
+		M_lanuch_vector_like_kernel(res, mat1, mat2, N, cu_vector_sub);
 	}
 
 	// Multiply `mat1` and `mat2` element wise and store the result in `res` (Rij = M1ij * M2ij)

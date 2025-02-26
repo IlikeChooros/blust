@@ -1,8 +1,12 @@
 project(BlustTests LANGUAGES CXX)
 
-file(GLOB_RECURSE TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc)
+# file(GLOB_RECURSE TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc)
+# add_executable(BlustTests ${TEST_SOURCES})
 
-add_executable(BlustTests ${TEST_SOURCES})
+add_executable(
+	BlustTests
+	${CMAKE_CURRENT_SOURCE_DIR}/src/matrix-unittest.cc
+)
 
 target_link_libraries(BlustTests PUBLIC GTest::gtest GTest::gtest_main blust)
 
