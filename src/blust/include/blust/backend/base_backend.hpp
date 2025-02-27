@@ -25,6 +25,18 @@ public:
 	virtual void mat_mul(number_t* res, number_t* mat1, number_t* mat2, size_t rows1, size_t cols2, size_t rows2) = 0;
 };
 
+// Base backend, with memory preallocation (for gpu memory reservation)
+class base_memory_backend : public base_backend
+{
+public:
+	// Default constructor
+	base_memory_backend() = default;
+	virtual ~base_memory_backend() = default;
+
+	// Reserve memory for the given size (on 3 buffers)
+	virtual void reserve(size_t size_bytes) = 0;
+};
+
 // The backend that is used for all operations (intialized in main.cpp)
 static std::unique_ptr<base_backend> g_backend;
 constexpr std::unique_ptr<base_backend>& get_backend() { return g_backend; }

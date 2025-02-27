@@ -10,7 +10,7 @@
 START_BLUST_NAMESPACE
 
 // Cuda backend for matrix operations, only 1 backend can be used at a time
-class cuda_backend : public base_backend
+class cuda_backend : public base_memory_backend
 {
 	bool m_available = false;
 
@@ -28,18 +28,47 @@ class cuda_backend : public base_backend
 	CUfunction cu_mat_transpose;
 	CUfunction cu_mat_mul;
 
-	CUdeviceptr deviceData1;
-	CUdeviceptr deviceData2;
-	CUdeviceptr deviceDataResult;
+	size_t m_data1_size = 0;
+	size_t m_data2_size = 0;
+	size_t m_result_size = 0;
+
+	CUdeviceptr deviceData1 = NULL;
+	CUdeviceptr deviceData2 = NULL;
+	CUdeviceptr deviceDataResult = NULL;
 
 	void M_run_test();
-	void M_prepare_cuda(number_t* res, size_t r, number_t* mat1, size_t m1, number_t* mat2, size_t m2);
-	void M_prepare_cuda(number_t* res, size_t r, number_t* mat, size_t m);
-	void M_clean_up_cuda(number_t* res, size_t r, bool all = true);
+	void M_prepare_cuda(size_t r, number_t* mat1, size_t m1, number_t* mat2, size_t m2);
+	void M_prepare_cuda(size_t r, number_t* mat, size_t m);
 	void M_lanuch_vector_like_kernel(number_t* res, number_t* mat1, number_t* mat2, size_t N, CUfunction kernel);
 
+	// Copy the device result to `res`
+	inline void M_copy_gpu_result(number_t* res, size_t r)
+	{
+		checkCudaErrors(cuMemcpyDtoH(res, deviceDataResult, r * sizeof(number_t)));
+	}
+
+	// Safe deallocation of a pointer (checks if the pointer is not null)
+	static inline void M_safe_dealloc(CUdeviceptr& ptr) 
+	{
+		if (ptr != NULL) {
+			checkCudaErrors(cuMemFree(ptr));
+			ptr = NULL;
+		}
+	}
+
+	// Try to allocate memory if the previous size is less than the current size
+	// And copy the data to the device
+	static inline void M_try_alloc(CUdeviceptr& ptr, size_t size, size_t& prev_size) 
+	{
+		if (prev_size < size) {
+			prev_size = size;
+			M_safe_dealloc(ptr);
+			checkCudaErrors(cuMemAlloc(&ptr, size * sizeof(number_t)));
+		}
+	}
+
 	// Launch the kernel
-	inline void M_launch_kernel(CUfunction kernel, int nblocks, void** args) {
+	static inline void M_launch_kernel(CUfunction kernel, int nblocks, void** args) {
 		checkCudaErrors(cuLaunchKernel(kernel, nblocks, 1, 1,
 			THREADS_PER_BLOCK, 1, 1, 0, NULL, args, NULL));
 	}
@@ -73,6 +102,14 @@ public:
 
 	// See if the cuda backend is available
 	bool is_available() const { return m_available; }
+
+	// Free the memory (will be called anyway by the destructor)
+	void free_memory();
+
+	// Reserve memory for the given size (on 3 buffers)
+	// If this is the maximum size of all buffers that will be used
+	// then this will be the only memory allocation on the GPU
+	void reserve(size_t size_bytes) override;
 
 	// Return the name of the backend 'cuda'
 	const char* get_name() override { return "cuda"; }

@@ -37,7 +37,7 @@ public:
 // This is optimized backend, it will use the fastest backend available
 // Boils down to comparing the execution time of the operation on CPU and GPU
 // with given matrix dimension, and choosing the fastest one
-class optimized_backend : public base_backend
+class optimized_backend : public base_memory_backend
 {
 	typedef std::function<void(base_backend*, number_t*, number_t*, number_t*, size_t)> fn_backend_t;
 
@@ -67,6 +67,10 @@ public:
 
 	const char* get_name() override { return "optimized"; }
 
+	void reserve(size_t size_bytes) override
+	{
+		m_cuda.reserve(size_bytes);
+	}
 
 	void vector_add(number_t* res, number_t* mat1, number_t* mat2, size_t N) override
 	{

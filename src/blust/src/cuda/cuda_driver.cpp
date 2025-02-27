@@ -14,6 +14,7 @@ cuda_backend::cuda_backend(int argc, char ** argv)
 
 cuda_backend::~cuda_backend()
 {
+	free_memory();
 	checkCudaErrors(cuCtxDestroy(cuContext));
 }
 
@@ -75,7 +76,7 @@ void cuda_backend::init(int argc, char** argv)
 // Assumes that `res`, `mat1` and `mat2` has already preallocated buffers
 void cuda_backend::M_lanuch_vector_like_kernel(number_t* res, number_t* mat1, number_t* mat2, size_t N, CUfunction kernel)
 {
-    M_prepare_cuda(res, N, mat1, N, mat2, N);
+    M_prepare_cuda(N, mat1, N, mat2, N);
 
     // Grid/Block configuration
     int blocksPerGrid = M_get_blocks_per_grid(N);
@@ -83,36 +84,51 @@ void cuda_backend::M_lanuch_vector_like_kernel(number_t* res, number_t* mat1, nu
 
     // Launch the CUDA kernel
     M_launch_kernel(kernel, blocksPerGrid, args);
-    M_clean_up_cuda(res, N);
+    M_copy_gpu_result(res, N);
+}
+
+
+void cuda_backend::free_memory()
+{
+    M_safe_dealloc(deviceData1);
+    M_safe_dealloc(deviceData2);
+    M_safe_dealloc(deviceDataResult);
+}
+
+void cuda_backend::reserve(size_t size_bytes)
+{
+	M_try_alloc(deviceData1, size_bytes, m_data1_size);
+	M_try_alloc(deviceData2, size_bytes, m_data2_size);
+	M_try_alloc(deviceDataResult, size_bytes, m_result_size);
 }
 
 void cuda_backend::vector_scalar_mul(number_t* res, number_t* mat, number_t scalar, size_t N)
 {
-	M_prepare_cuda(res, N, mat, N);
+	M_prepare_cuda(N, mat, N);
 
 	auto blocksPerGrid = M_get_blocks_per_grid(N);
 	void* args[] = { &deviceData1, &scalar, &deviceDataResult, &N};
 
     M_launch_kernel(cu_vector_mul_scalar, blocksPerGrid, args);
-	M_clean_up_cuda(res, N, false);
+    M_copy_gpu_result(res, N);
 }
 
 void cuda_backend::mat_transpose(number_t* res, number_t* mat, size_t rows, size_t cols)
 {
     size_t N = rows * cols;
-	M_prepare_cuda(res, N, mat, N);
+	M_prepare_cuda(N, mat, N);
 
 	auto blocksPerGrid = M_get_blocks_per_grid(N);
 	void* args[] = { &deviceData1, &deviceDataResult, &rows, &cols };
 
     M_launch_kernel(cu_mat_transpose, blocksPerGrid, args);
-	M_clean_up_cuda(res, N, false);
+    M_copy_gpu_result(res, N);
 }
 
 void cuda_backend::mat_mul(number_t* res, number_t* mat1, number_t* mat2, size_t rows1, size_t cols2, size_t rows2)
 {
 	size_t N = rows1 * cols2;
-	M_prepare_cuda(res, N, mat1, rows1 * rows2, mat2, rows2 * cols2);
+	M_prepare_cuda(N, mat1, rows1 * rows2, mat2, rows2 * cols2);
 
 	constexpr int BLOCK_SIZE = 16;
 	std::pair<int, int> blockDim = { BLOCK_SIZE, BLOCK_SIZE };
@@ -126,18 +142,17 @@ void cuda_backend::mat_mul(number_t* res, number_t* mat1, number_t* mat2, size_t
     checkCudaErrors(cuLaunchKernel(cu_mat_mul, gridDim.first, gridDim.second, 1,
         blockDim.first, blockDim.second, 1, 0, NULL, args, NULL));
 
-	M_clean_up_cuda(res, N);
+	M_copy_gpu_result(res, N);
 }
 
 // Allocate memory on cuda device (deviceData1, deviceData2, deviceDataResult) and copy from host
 // given data1 and data2 to deviceData1, deviceData2
-void cuda_backend::M_prepare_cuda(number_t* res, size_t r, number_t* mat1, size_t m1, number_t* mat2, size_t m2)
+void cuda_backend::M_prepare_cuda(size_t r, number_t* mat1, size_t m1, number_t* mat2, size_t m2)
 {
     // Allocate memory on GPU
-    //printf("Allocating GPU memory: %llu\n", r * sizeof(number_t));
-    checkCudaErrors(cuMemAlloc(&deviceData1, m1 * sizeof(number_t)));
-    checkCudaErrors(cuMemAlloc(&deviceData2, m2 * sizeof(number_t)));
-    checkCudaErrors(cuMemAlloc(&deviceDataResult, r * sizeof(number_t)));
+	M_try_alloc(deviceData1, m1, m_data1_size);
+	M_try_alloc(deviceData2, m2, m_data2_size);
+	M_try_alloc(deviceDataResult, r, m_result_size);
 
     // Copy the data
     checkCudaErrors(cuMemcpyHtoD(deviceData1, mat1, m1 * sizeof(number_t)));
@@ -145,29 +160,14 @@ void cuda_backend::M_prepare_cuda(number_t* res, size_t r, number_t* mat1, size_
 }
 
 // Overload when only one matrix is needed
-void cuda_backend::M_prepare_cuda(number_t* res, size_t r, number_t* mat, size_t m)
+void cuda_backend::M_prepare_cuda(size_t r, number_t* mat, size_t m)
 {
 	// Allocate memory on GPU
-	//printf("Allocating GPU memory: %llu\n", r * sizeof(number_t));
-	checkCudaErrors(cuMemAlloc(&deviceData1, m * sizeof(number_t)));
-	checkCudaErrors(cuMemAlloc(&deviceDataResult, r * sizeof(number_t)));
+    M_try_alloc(deviceData1, m, m_data1_size);
+    M_try_alloc(deviceDataResult, r, m_result_size);
 
 	// Copy the data
 	checkCudaErrors(cuMemcpyHtoD(deviceData1, mat, m * sizeof(number_t)));
-}
-
-// Copies the device result to `res` and frees the GPU memory
-void cuda_backend::M_clean_up_cuda(number_t* res, size_t r, bool all)
-{
-    // Copy from device to result
-    checkCudaErrors(cuMemcpyDtoH(res, deviceDataResult, r * sizeof(number_t)));
-
-    // Free data
-    checkCudaErrors(cuMemFree(deviceData1));
-    checkCudaErrors(cuMemFree(deviceDataResult));
-
-    if (all)
-        checkCudaErrors(cuMemFree(deviceData2));
 }
 
 // Allocates an array with random float entries.
@@ -194,14 +194,11 @@ void cuda_backend::M_run_test() {
 
     // Allocate vectors in device memory
     checkCudaErrors(cuMemAlloc(&deviceData1, size));
-
     checkCudaErrors(cuMemAlloc(&deviceData2, size));
-
     checkCudaErrors(cuMemAlloc(&deviceDataResult, size));
 
     // Copy vectors from host memory to device memory
     checkCudaErrors(cuMemcpyHtoD(deviceData1, h_A, size));
-
     checkCudaErrors(cuMemcpyHtoD(deviceData2, h_B, size));
 
     
@@ -240,6 +237,8 @@ void cuda_backend::M_run_test() {
     checkCudaErrors(cuMemFree(deviceData1));
     checkCudaErrors(cuMemFree(deviceData2));
     checkCudaErrors(cuMemFree(deviceDataResult));
+
+	deviceData1 = deviceData2 = deviceDataResult = NULL;
 
     // Free host memory
     if (h_A) {
