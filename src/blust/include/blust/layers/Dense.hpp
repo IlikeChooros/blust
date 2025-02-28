@@ -24,6 +24,7 @@ class Dense : public WeightedLayer
     matrix_t m_d_biases             = {};
 
 public:
+	friend class Sequential;
 
     Dense(size_t n_outputs) { m_output_size = n_outputs; }
 

@@ -72,6 +72,17 @@ void Model::fit()
     
 }
 
+void Model::apply_gradients()
+{
+	BaseLearningLayer* layer =
+		dynamic_cast<BaseLearningLayer*>(m_input_layer->m_next);
+	while (layer != nullptr)
+	{
+		layer->apply(m_learning_rate);
+		layer = dynamic_cast<BaseLearningLayer*>(layer->m_next);
+	}
+}
+
 void Model::train_on_batch(batch_t& inputs, batch_t& expected)
 {
     // Backpropagate the gradients
@@ -81,14 +92,7 @@ void Model::train_on_batch(batch_t& inputs, batch_t& expected)
     }
 
     // Apply the gradients
-    BaseLearningLayer *layer = 
-        dynamic_cast<BaseLearningLayer*>(m_input_layer->m_next);
-
-    while (layer != nullptr)
-    {
-        layer->apply(m_learning_rate);
-        layer = dynamic_cast<BaseLearningLayer*>(layer->m_next);
-    }
+	apply_gradients();
 
     std::cout << "cost=" << dynamic_cast<BaseLearningLayer*>(m_output_layer)->cost(expected[expected.size() - 1], m_error_func) << '\n';
 }

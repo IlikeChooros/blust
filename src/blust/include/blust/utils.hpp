@@ -126,5 +126,20 @@ namespace utils
         // Radomize all values
         std::generate(first, last, [&dist, &eng](){ return dist(eng); });
     }
+
+
+    /**
+	* @brief Converts a number from a big-endian to a little-endian
+    */
+    inline int swap_32(int val)
+    {
+#if defined(__GNUC__) || defined(__clang__)
+		return __builtin_bswap32(val);
+#elif defined(_MSC_VER)
+		return _byteswap_ulong(val);
+#else
+		return (val >> 24) | ((val << 8) & 0x00FF0000) | ((val >> 8) & 0x0000FF00) | (val << 24);
+#endif
+    }
 }
 END_BLUST_NAMESPACE

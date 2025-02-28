@@ -63,6 +63,8 @@ public:
     // Attach the input layer
     void attach(BaseLayer* prev) 
     { 
+		if (prev == nullptr) return;
+
         prev->m_next = this; 
         this->m_prev = prev;
     }

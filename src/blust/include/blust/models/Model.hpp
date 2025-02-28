@@ -5,17 +5,23 @@
 
 START_BLUST_NAMESPACE
 
-/// <summary>
-/// 
-/// </summary>
+// Base class for all models
 class Model
 {
 public:
+    Model() = default;
+
     Model(BaseLayer* inputs, BaseLayer* outputs) : 
         m_input_layer(inputs), m_output_layer(outputs) {}
 
+	inline void init(BaseLayer* inputs, BaseLayer* outputs)
+	{
+		m_input_layer = inputs;
+		m_output_layer = outputs;
+	}
+
     // Prepare the model for learning
-    void compile(number_t learning_rate = 0.2, error_funcs loss = mean_squared_error);
+    virtual void compile(number_t learning_rate = 0.2, error_funcs loss = mean_squared_error);
 
     // Feed forward the model
     void call(matrix_t& inputs);
@@ -29,6 +35,7 @@ public:
     
     // Backpropagte on a single data input
     void backprop(matrix_t& expected);
+	void apply_gradients();
     void fit();
     void train_on_batch(batch_t& inputs, batch_t& expected);
 

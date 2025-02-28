@@ -149,7 +149,7 @@ void cuda_backend::mat_mul(number_t* res, number_t* mat1, number_t* mat2, size_t
 // given data1 and data2 to deviceData1, deviceData2
 void cuda_backend::M_prepare_cuda(size_t r, number_t* mat1, size_t m1, number_t* mat2, size_t m2)
 {
-    // Allocate memory on GPU
+	// Allocate memory on GPU if needed
 	M_try_alloc(deviceData1, m1, m_data1_size);
 	M_try_alloc(deviceData2, m2, m_data2_size);
 	M_try_alloc(deviceDataResult, r, m_result_size);
