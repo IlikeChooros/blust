@@ -256,7 +256,7 @@ public:
     friend matrix<dtype> operator*(matrix<dtype>& lhs, matrix<dtype>&& rhs) { return lhs.M_multip(rhs); }
     friend matrix<dtype> operator*(matrix<dtype>&& lhs, matrix<dtype>&& rhs) { return lhs.M_multip(rhs); }
 
-    // Multiply matricies with hadamard product (Cij = (Aij * Bij))
+    // Multiply matrices with hadamard product (Cij = (Aij * Bij))
     friend matrix<dtype> operator%(matrix<dtype>& lhs, matrix<dtype>& rhs) 
     {
         matrix<dtype> m(lhs);
@@ -264,7 +264,7 @@ public:
         return m;
     }
 
-    // Multiply matricies with hadamard product (Cij = (Aij * Bij))
+    // Multiply matrices with hadamard product (Cij = (Aij * Bij))
     friend matrix<dtype> operator%(matrix<dtype>&& lhs, matrix<dtype>& rhs)
     {
         matrix<dtype> m(std::forward<matrix<dtype>>(lhs));
@@ -298,7 +298,7 @@ public:
         return *this;
     }
 
-    // Multiply matricies with hadamard product (Cij = (Aij * Bij)) (same as `A % B`)
+    // Multiply matrices with hadamard product (Cij = (Aij * Bij)) (same as `A % B`)
     matrix hadamard(matrix<dtype>& mul)
     {
         matrix<dtype> m(*this);
@@ -306,7 +306,7 @@ public:
         return m;
     }
 
-    // Multiply matricies with hadamard product (Cij = (Aij * Bij)) (same as `A % B`)
+    // Multiply matrices with hadamard product (Cij = (Aij * Bij)) (same as `A % B`)
     matrix hadamard(matrix<dtype>&& mul)
     {
         matrix<dtype> m(std::forward<decltype(mul)>(mul)); // don't copy the buffer
@@ -397,7 +397,7 @@ private:
 		g_backend->vector_add(m1.data(), m1.data(), m2.data(), m1.size());
     }
 
-    // Substract matrix `m1` from `m2` (result is stored in m1) (GPU)
+    // Subtract matrix `m1` from `m2` (result is stored in m1) (GPU)
     static void M_helper_sub_m(matrix<dtype>& m1, matrix<dtype>& m2)
     {
         M_assert_eq_dim(m1, m2);

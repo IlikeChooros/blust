@@ -10,6 +10,8 @@
 #include "backend/optimized.hpp"
 #include "settings.hpp"
 #include "datasets/mnist.hpp"
+#include "backend/operations.hpp"
+#include "tensor.hpp"
 
 START_BLUST_NAMESPACE
 

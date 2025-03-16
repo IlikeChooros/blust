@@ -5,28 +5,6 @@
 
 START_BLUST_NAMESPACE
 
-/**
- * ## Activation types
- * - `none`: f(x) = x
- * - `relu`: f(x) = {x if x >= 0, 0 if x < 0}
- * - `sigmoid`: f(x) = 1 / (1 + exp(-x))
- * - `softmax`: f([x1, x2, ..., xn], i) = exp(xi) / sum([x1, x2, ..., xn])
- */
-enum activations {
-    none,
-    relu,
-    sigmoid,
-    softmax,
-};
-
-/**
- * ## Error functions
- * - `mean_squared_error`: f([x1, x2, ..., xn], [e1, e2, ..., en]) = 1 / n * sum_i((xi - ei)^2)
- */
-enum error_funcs {
-    mean_squared_error
-};
-
 class BaseErrorFunctor {
 public:
     virtual number_t error(matrix_t& outputs, matrix_t& expected) = 0;

@@ -7,20 +7,25 @@ using namespace blust;
 int main(int argc, char** argv)
 {
     init(argc, argv, "");
-	batch_t dataset, labels;
-	mnist::load_dataset(dataset, labels);
+	// batch_t dataset, labels;
+	// mnist::load_dataset(dataset, labels);
 
-	Sequential seq;
-	seq.add(Input({ 1, 784 }));
-	seq.add(Dense(512, relu));
-	seq.add(Dense(64, sigmoid));
-	seq.add(Dense(10, softmax));
+	// Sequential seq;
+	// seq.add(Input({ 1, 784 }));
+	// seq.add(Dense(512, relu));
+	// seq.add(Dense(64, sigmoid));
+	// seq.add(Dense(10, softmax));
 
-	seq.compile(new SGD(1e-2, 0.9, true));
-	seq.fit(dataset, labels, 30);
+	// seq.compile(new SGD(1e-2, 0.9, true));
+	// seq.fit(dataset, labels, 30);
+
+	tensor t({3, 3}, 1.25);
+
+	std::cout << t << '\n';
+
 
 	return 0;
-
+}
 	/*Sequential seq;
 	({
 		new Input({1, 768}),
@@ -86,4 +91,3 @@ int main(int argc, char** argv)
 	printf("avg time: %f ms\n", duration.count() / 10.0f);
 
     return 0;*/
-}

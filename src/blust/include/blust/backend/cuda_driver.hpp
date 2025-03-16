@@ -5,8 +5,7 @@
 #include <cuda.h>
 #include "helper_cuda.h"
 #include "helper_cuda_drvapi.h"
-
-#include <math.h>
+#include <cmath>
 
 START_BLUST_NAMESPACE
 
@@ -40,10 +39,10 @@ class cuda_backend : public base_memory_backend
 	void M_run_test();
 	void M_prepare_cuda(size_t r, number_t* mat1, size_t m1, number_t* mat2, size_t m2);
 	void M_prepare_cuda(size_t r, number_t* mat, size_t m);
-	void M_lanuch_vector_like_kernel(number_t* res, number_t* mat1, number_t* mat2, size_t N, CUfunction kernel);
+	void M_launch_vector_like_kernel(number_t* res, number_t* mat1, number_t* mat2, size_t N, CUfunction kernel);
 
 	// Copy the device result to `res`
-	inline void M_copy_gpu_result(number_t* res, size_t r)
+	inline void M_copy_gpu_result(number_t* res, const size_t r) const
 	{
 		checkCudaErrors(cuMemcpyDtoH(res, deviceDataResult, r * sizeof(number_t)));
 	}
@@ -59,7 +58,7 @@ class cuda_backend : public base_memory_backend
 
 	// Try to allocate memory if the previous size is less than the current size
 	// And copy the data to the device
-	static inline void M_try_alloc(CUdeviceptr& ptr, size_t size, size_t& prev_size) 
+	static inline void M_try_alloc(CUdeviceptr& ptr, const size_t size, size_t& prev_size)
 	{
 		if (prev_size < size) {
 			prev_size = size;
@@ -69,7 +68,7 @@ class cuda_backend : public base_memory_backend
 	}
 
 	// Launch the kernel
-	static inline void M_launch_kernel(CUfunction kernel, int nblocks, void** args) {
+	static inline void M_launch_kernel(const CUfunction& kernel, const int& nblocks, void** args) {
 		checkCudaErrors(cuLaunchKernel(kernel, nblocks, 1, 1,
 			THREADS_PER_BLOCK, 1, 1, 0, NULL, args, NULL));
 	}
@@ -115,22 +114,41 @@ public:
 	// Return the name of the backend 'cuda'
 	const char* get_name() override { return "cuda"; }
 
+	void relu(npointer_t input, npointer_t result, size_t n) override;
+	void sigmoid(npointer_t input, npointer_t result, size_t n) override;
+	void softmax(npointer_t input, npointer_t result, size_t n) override;
+
+	void none(npointer_t input, npointer_t result, size_t n) override {
+		memcpy(result, input, n * sizeof(number_t));
+	}
+
+	void backprop_dense_output(
+		number_t *outputs, number_t *expected, activations act_type,
+		number_t *parial_deriv, shape2D output_shape, size_t n_batch) override;
+
+	void backprop_hidden_dense(
+		number_t *d_weights, number_t *d_biases, activations act_type,
+		number_t *d_prev_activations, number_t *weights, number_t *inputs,
+		number_t *prev_d_activations, number_t *prev_weights,
+		size_t n_weights, size_t n_prev_activations,
+		size_t n_inputs, size_t n_batch) override;
+
 	// Add `mat1` and `mat2` and store the result in `res` (Rij = M1ij + M2ij)
 	void vector_add(number_t* res, number_t* mat1, number_t* mat2, size_t N) override
 	{
-		M_lanuch_vector_like_kernel(res, mat1, mat2, N, cu_vector_add);
+		M_launch_vector_like_kernel(res, mat1, mat2, N, cu_vector_add);
 	}
 
 	// Subtract `mat2` from `mat1` and store the result in `res` (Rij = M1ij - M2ij)
 	void vector_sub(number_t* res, number_t* mat1, number_t* mat2, size_t N) override
 	{
-		M_lanuch_vector_like_kernel(res, mat1, mat2, N, cu_vector_sub);
+		M_launch_vector_like_kernel(res, mat1, mat2, N, cu_vector_sub);
 	}
 
 	// Multiply `mat1` and `mat2` element wise and store the result in `res` (Rij = M1ij * M2ij)
 	void vector_mul_hadamard(number_t* res, number_t* mat1, number_t* mat2, size_t N) override
 	{
-		M_lanuch_vector_like_kernel(res, mat1, mat2, N, cu_vector_mul_hadamard);
+		M_launch_vector_like_kernel(res, mat1, mat2, N, cu_vector_mul_hadamard);
 	}
 
 	// Multiply the matrix by a scalar (Rij = Mij * scalar)

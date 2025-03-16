@@ -1,6 +1,102 @@
 #include <blust/backend/cpu.hpp>
 
+#include <cmath>
+
 START_BLUST_NAMESPACE
+
+constexpr void d_sigmoid(const_npointer_t output, npointer_t result, size_t n) {
+	for (size_t i = 0; i < n; i++) {
+		result[i] = output[i] * (1 - output[i]);
+	}
+}
+
+constexpr void d_relu(const_npointer_t output, npointer_t result, size_t n) {
+	for (size_t i = 0; i < n; i++) {
+		result[i] = output[i] > 0;
+	}
+}
+
+constexpr void d_softmax(const_npointer_t output, npointer_t result, size_t n) {
+	for (size_t i = 0; i < n; i++) {
+		result[i] = output[i] * (1 - output[i]);
+	}
+}
+
+constexpr void d_none(const_npointer_t, npointer_t result, size_t n) {
+	memset(result, 1, n * sizeof(number_t));
+}
+
+
+npointer_t cpu_backend::M_get_d_activations(const_npointer_t outputs, size_t n, activations act_type) {
+	const auto result = new number_t[n];
+
+	switch (act_type) {
+		case activations::sigmoid:
+			d_sigmoid(outputs, result, n);
+			break;
+		case activations::softmax:
+			d_softmax(outputs, result, n);
+			break;
+		case activations::relu:
+			d_relu(outputs, result, n);
+			break;
+		case activations::none:
+		default:
+			d_none(outputs, result, n);
+			break;
+	}
+
+	return result;
+}
+
+
+void cpu_backend::relu(npointer_t input, npointer_t result, size_t n) {
+	for (size_t i = 0; i < n; i++) {
+		result[i] = input[i] > 0 ? input[i] : 0;
+	}
+}
+
+void cpu_backend::sigmoid(npointer_t input, npointer_t result, size_t n) {
+	for (size_t i = 0; i < n; i++) {
+		result[i] = (number_t)1.0 / ((number_t)1.0 + (number_t)std::exp(-input[i]));
+	}
+}
+
+void cpu_backend::softmax(npointer_t input, npointer_t result, size_t n) {
+	number_t sum = 0;
+	for (size_t i = 0; i < n; i++) {
+		result[i] = std::exp(input[i]);
+		sum += result[i];
+	}
+
+	sum += 1e-4;
+
+	for (size_t i = 0; i < n; i++) {
+		result[i] = result[i] / sum;
+	}
+}
+
+void cpu_backend::backprop_dense_output(
+	number_t *outputs, number_t *expected, activations act_type,
+	number_t *parial_deriv, shape2D output_shape, size_t n_batch)
+{
+	for (size_t i = 0; i < output_shape.x; i++) {
+
+
+		for (size_t j = 0; j < output_shape.y; j++) {}
+	}
+}
+
+
+void cpu_backend::backprop_hidden_dense(
+	number_t *d_weights, number_t *d_biases, activations act_type, number_t *d_prev_activations,
+	number_t *weights, number_t *inputs, number_t *prev_d_activations, number_t *prev_weights,
+	size_t n_weights, size_t n_prev_activations, size_t n_inputs, size_t n_batch)
+{
+
+}
+
+
 
 // Add the matrices (Cij = Aij + Bij)
 void cpu_backend::vector_add(number_t* res, number_t* mat1, number_t* mat2, size_t N)

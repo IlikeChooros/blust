@@ -1,10 +1,5 @@
 #include <blust/backend/cuda_driver.hpp>
 
-// define input fatbin file
-#ifndef FATBIN_FILE
-#define FATBIN_FILE "cuda_kernel64.fatbin"
-#endif
-
 START_BLUST_NAMESPACE
 
 cuda_backend::cuda_backend(int argc, char ** argv)
@@ -20,8 +15,11 @@ cuda_backend::cuda_backend(int argc, char ** argv)
 
 cuda_backend::~cuda_backend()
 {
-	free_memory();
-	checkCudaErrors(cuCtxDestroy(cuContext));
+    if (m_available)
+    {
+        free_memory();
+	    checkCudaErrors(cuCtxDestroy(cuContext));
+    }
 }
 
 // Initialize the CUDA backend
@@ -58,7 +56,7 @@ void cuda_backend::init(int argc, char** argv)
     checkCudaErrors(cuModuleLoadData(&cuModule, fatbin.str().c_str()));
 
     // Load all the functions from the module
-    const int n_functions = 6;
+    constexpr int n_functions = 6;
     CUfunction* all_functions[n_functions] = {
         &cu_vector_add, &cu_vector_sub, &cu_vector_mul_hadamard,
         &cu_vector_mul_scalar, &cu_mat_transpose, &cu_mat_mul
@@ -79,7 +77,7 @@ void cuda_backend::init(int argc, char** argv)
 }
 
 // Assumes that `res`, `mat1` and `mat2` has already preallocated buffers
-void cuda_backend::M_lanuch_vector_like_kernel(number_t* res, number_t* mat1, number_t* mat2, size_t N, CUfunction kernel)
+void cuda_backend::M_launch_vector_like_kernel(number_t* res, number_t* mat1, number_t* mat2, size_t N, CUfunction kernel)
 {
     M_prepare_cuda(N, mat1, N, mat2, N);
 
@@ -106,6 +104,21 @@ void cuda_backend::reserve(size_t size_bytes)
 	M_try_alloc(deviceData2, size_bytes, m_data2_size);
 	M_try_alloc(deviceDataResult, size_bytes, m_result_size);
 }
+
+void cuda_backend::relu(npointer_t input, npointer_t result, size_t n) {};
+void cuda_backend::sigmoid(npointer_t input, npointer_t result, size_t n) {};
+void cuda_backend::softmax(npointer_t input, npointer_t result, size_t n) {};
+
+void cuda_backend::backprop_dense_output(
+    number_t *outputs, number_t *expected, activations act_type,
+    number_t *parial_deriv, shape2D output_shape, size_t n_batch) {};
+
+void cuda_backend::backprop_hidden_dense(
+    number_t *d_weights, number_t *d_biases, activations act_type,
+    number_t *d_prev_activations, number_t *weights, number_t *inputs,
+    number_t *prev_d_activations, number_t *prev_weights,
+    size_t n_weights, size_t n_prev_activations,
+    size_t n_inputs, size_t n_batch) {};
 
 void cuda_backend::vector_scalar_mul(number_t* res, number_t* mat, number_t scalar, size_t N)
 {
