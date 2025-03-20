@@ -20,22 +20,48 @@ class ops_tensor : public tensor
 public:
 
     // Get the ops tensor from a tensor
-    static ops_tensor get(const tensor& t)
+    static ops_tensor get(tensor&& t)
     {
         if (t.is_cuda())
             return ops_tensor(t.cu_release(), t.layout());
         return ops_tensor(t.release(), t.layout()); // idk if i should do that
     }
 
-    // Release the pointer of the t
-    ops_tensor(const tensor& t)
+    // Just copy the tensor, tensor under normal cicumstances can't own a cuda pointer anyway
+    ops_tensor(const tensor& t) : tensor(t) {}
+    ops_tensor(tensor&& t) : tensor(std::forward<tensor>(t)) {}
+    ops_tensor& operator=(const tensor& t)
     {
-
+        tensor::operator=(t);
+        return *this;
     }
 
-    ops_tensor(ops_tensor&& t)
+    ops_tensor& operator=(tensor&& t)
     {
+        tensor::operator=(std::forward<tensor>(t));
+        return *this;
+    }
 
+    // Perform a 'smart' copy
+    ops_tensor(const ops_tensor& other) : tensor(other) {}
+    ops_tensor& operator=(const ops_tensor& other)
+    {
+        if (this != &other)
+        {
+            tensor::operator=(other);
+        }
+        return *this;
+    }
+
+    // Move constructor
+    ops_tensor(ops_tensor&& other) : tensor(std::move(other)) {}
+    ops_tensor& operator=(ops_tensor&& other)
+    {
+        if (this != &other)
+        {
+            tensor::operator=(std::move(other));
+        }
+        return *this;
     }
 
     // Get the released pointer
@@ -67,7 +93,7 @@ protected:
 
     void M_assert_tensor_dim_mat_mul(tensor_t& a, tensor_t& b)
     {
-        if ((a.rank() != 2 || b.rank() != 2) || (a.dim()[1] != b.dim()[1]))
+        if ((a.rank() != 2 || b.rank() != 2) || (a.dim()[1] != b.dim()[0]))
             throw std::runtime_error("Invalid tensor dimensions for matrix multiplication");
     }
 

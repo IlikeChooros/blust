@@ -12,6 +12,7 @@
 #include "datasets/mnist.hpp"
 #include "backend/operations.hpp"
 #include "tensor.hpp"
+#include "backend/ops.hpp"
 
 START_BLUST_NAMESPACE
 
@@ -20,6 +21,7 @@ inline void init(int argc, char** argv, std::string device = "")
 {
 	g_settings = std::make_unique<settings>();
 	g_settings->init(argv);
+	ops = std::make_unique<cpu_ops>();
 
 	if (device == "cpu")
 		g_backend = std::make_unique<cpu_backend>();

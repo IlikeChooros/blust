@@ -1,6 +1,7 @@
 #include <blust/blust.hpp>
 #include <chrono>
 #include <iostream>
+#include <sys/time.h>
 
 using namespace blust;
 
@@ -19,10 +20,25 @@ int main(int argc, char** argv)
 	// seq.compile(new SGD(1e-2, 0.9, true));
 	// seq.fit(dataset, labels, 30);
 
-	tensor t({3, 3}, 1.25);
+	int n = 10000, m = 20000;
 
-	std::cout << t << '\n';
+	tensor t({n, m}, 1.25);
+	tensor t1({n, m}, 2.5);
 
+	struct timeval start, finish;
+	double gflops = 2.0 * n * m * 1e-9;
+
+	// std::cout << t << '\n';
+	// std::cout << t1 << '\n';
+
+	gettimeofday(&start, NULL);
+	tensor r = ops->add(t, t1);
+	gettimeofday(&finish, NULL);
+
+	double duration = ((double)(finish.tv_sec-start.tv_sec)*1000000 + (double)(finish.tv_usec-start.tv_usec)) / 1000000;
+	printf("Dot product took %f seconds GFLOPS : %f\n",duration,gflops/duration);
+
+	// std::cout << r << '\n';
 
 	return 0;
 }

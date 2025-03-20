@@ -41,7 +41,7 @@ public:
         m_data_type     = data_type::buffer;
 
         if (init != 0.0)
-            std::fill(m_tensor.data, m_tensor.data + count, init);
+            std::fill_n(m_tensor.data, count, init);
     }
 
     // Copy constructor
@@ -59,14 +59,10 @@ public:
 
     tensor& operator=(const tensor& t) noexcept
     {
-        const auto count    = t.size();
-        m_shape             = t.m_shape;
-        m_data_type         = data_type::buffer; // always use buffer
-        
-        if (count == 0) 
-            return *this;
+        auto count = M_alloc_buffer(t);
 
-        m_tensor.data       = new number_t[count];
+        if (count == 0)
+            return *this;
 
         // If that's a cuda pointer, memcpy to this buffer
         if (t.m_data_type == data_type::cuda) {
@@ -78,6 +74,8 @@ public:
         {
             std::copy_n(t.m_tensor.data, count, m_tensor.data); // will memcpy the buffer
         }
+
+        return *this;
     }
 
     tensor& operator=(tensor&& t) noexcept
@@ -99,6 +97,8 @@ public:
             // Just release the buffer
             m_tensor.data = t.release();
         }
+
+        return *this;
     }
 
     ~tensor() noexcept
@@ -125,13 +125,20 @@ public:
     // Check wheter internal buffer is stored in gpu memory
     bool is_cuda() const noexcept { return m_data_type == data_type::cuda; }
 
-    // Get the internall 1d buffer
+    // Check if the tensor is empty
+    bool empty() const noexcept 
+    { 
+        return m_shape.m_dims.empty() || (
+            m_data_type == data_type::buffer ? m_tensor.data == nullptr : m_tensor.cu_ptr == 0
+        ); 
+    }
+
+    // Get the internal 1d buffer
     pointer data() noexcept { return m_tensor.data; }
     const_pointer data() const noexcept { return m_tensor.data; }
 
     // Release the buffer, should be wrapped in a unique pointer with array type
     pointer release() noexcept { return M_release_t<pointer>(); }
-    const_pointer release() const noexcept { return M_release_t<pointer>(); }
     
     // Print the tensor to output stream
     friend std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept
@@ -161,13 +168,32 @@ private:
     // Private default constructor (for ops tensor)
     tensor() = default;
 
-    cu_pointer cu_release() const noexcept { return M_release_t<cu_pointer>(); }
+    cu_pointer cu_release() noexcept { return M_release_t<cu_pointer>(); }
     cu_pointer cu_data() const noexcept { return m_tensor.cu_ptr; }
 
 
     shape m_shape;
     internal_data m_tensor;
     data_type m_data_type;
+
+    /**
+     * @brief Allocates the buffer with the same size as `t`, copies the dimension, and sets the 
+     * data type to buffer, but DOES NOT COPY THE CONTENT of t's data
+     * @returns t.size() (if 0 then buffer was not allocated and is set to `nullptr`)
+     */
+    inline size_t M_alloc_buffer(const tensor& t) noexcept
+    {
+        const auto count    = t.size();
+        m_shape             = t.m_shape;
+        m_data_type         = data_type::buffer; // always use buffer
+        m_tensor.data       = nullptr;
+        
+        if (count == 0) 
+            return 0;
+
+        m_tensor.data       = new number_t[count];
+        return count;
+    }
 
     // Print the tensor recursively, to given output stream, rank = t.rank(), index = 0, offset = 0
     static void M_print_tensor(const tensor& t, std::ostream& out, size_t rank, size_t index = 0, size_t offset = 0) noexcept
@@ -216,11 +242,11 @@ private:
     // Get the internall buffer, either as a `pointer` or `cu_pointer`
     template <typename T>
     inline std::enable_if_t<std::is_same_v<T, pointer> || std::is_same_v<T, cu_pointer>, T>
-    M_release_t() const noexcept
+    M_release_t() noexcept
     {
         T res;
-        if constexpr (std::is_same_v<T, pointer>) { res = m_tensor.data; res = nullptr; }
-        else { res = m_tensor.cu_ptr; res = 0; }
+        if constexpr (std::is_same_v<T, pointer>) { res = m_tensor.data; m_tensor.data = nullptr; }
+        else { res = m_tensor.cu_ptr; m_tensor.cu_ptr = 0; }
         return res;
     }
 };

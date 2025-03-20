@@ -15,7 +15,7 @@ public:
     typedef std::vector<size_t> dim_t;
 
     // Create a shape object with given inital dimensions as a initializer list
-    shape(std::initializer_list<size_t> dims) noexcept
+    shape(std::initializer_list<int> dims) noexcept
     {
         m_dims.reserve(dims.size());
         for (auto& d : dims)
@@ -51,6 +51,9 @@ public:
     size_t total() const noexcept {
         return std::accumulate(m_dims.begin(), m_dims.end(), 1, std::multiplies<size_t>());
     }
+
+    // Clear the shape
+    void clear() noexcept { m_dims.clear(); }
 
     // Printing shape
     friend std::ostream& operator<<(std::ostream& out, const shape& s) noexcept

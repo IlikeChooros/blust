@@ -77,6 +77,11 @@
         "__nullptr": "cpp",
         "codecvt": "cpp",
         "__functional_03": "cpp",
-        "locale": "cpp"
+        "locale": "cpp",
+        "__mutex_base": "cpp",
+        "__node_handle": "cpp",
+        "filesystem": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
     }
 }
