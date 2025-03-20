@@ -5,6 +5,23 @@
 
 using namespace blust;
 
+void test_result(tensor& a, tensor& b, tensor& c) {
+
+	auto a_data = a.data();
+	auto b_data = b.data();
+	auto c_data = c.data();
+	auto size = a.size ();
+
+	for (size_t i = 0; i < size; i++) {
+		if (fabs(c_data[i] - (a_data[i] + b_data[i])) > 1e-6 ) {
+			std::cout << i << ": " << a_data[i] << " + " << b_data[i] << " != " << c_data[i] << std::endl;
+			return;
+		}
+	}
+
+	std::cout << "Test passed!\n";
+}
+
 int main(int argc, char** argv)
 {
     init(argc, argv, "");
@@ -25,18 +42,11 @@ int main(int argc, char** argv)
 	tensor t({n, m}, 1.25);
 	tensor t1({n, m}, 2.5);
 
-	struct timeval start, finish;
-	double gflops = 2.0 * n * m * 1e-9;
 
 	// std::cout << t << '\n';
 	// std::cout << t1 << '\n';
-
-	gettimeofday(&start, NULL);
-	tensor r = ops->add(t, t1);
-	gettimeofday(&finish, NULL);
-
-	double duration = ((double)(finish.tv_sec-start.tv_sec)*1000000 + (double)(finish.tv_usec-start.tv_usec)) / 1000000;
-	printf("Dot product took %f seconds GFLOPS : %f\n",duration,gflops/duration);
+	tensor r = ops->add(t, t1);	
+	test_result(t1, t, r);
 
 	// std::cout << r << '\n';
 

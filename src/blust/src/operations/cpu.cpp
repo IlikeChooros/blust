@@ -1,12 +1,14 @@
 #include <blust/backend/cpu_ops.hpp>
 
+#include <sys/time.h>
+
 START_BLUST_NAMESPACE
 
 typedef operations::tensor_t tensor_t;
 typedef tensor_t::pointer pointer;
 
 typedef union {
-    __m256 v;
+    __m128 v;
     float d[4];
 } vec4f_t;
 
@@ -18,46 +20,65 @@ void cpu_ops::M_add(
 ) noexcept
 {
     size_t i = 0;
-    // vec4f_t v1, v2;
 
-
-    // for (;i < size; i++, a_data++, b_data++, c_data++) {
-    //     *c_data += *a_data * n + *b_data * m;
-    // }
-
-    double res_a0, res_a1, res_a2, res_a3;
-
-    res_a0 = 0.0;
-    res_a1 = 0.0;
-    res_a2 = 0.0;
-    res_a3 = 0.0;
-
-    for (; i < size; i += 4)
+    if (size >= 4)
     {
-        res_a0 = *a_data * n;
-        res_a1 = *(a_data + 1) * n;
-        res_a2 = *(a_data + 2) * n;
-        res_a3 = *(a_data + 3) * n;
+        vec4f_t va, vb, vc, vn, vm;
 
-        res_a0 += *b_data * m;
-        res_a1 += *(b_data + 1) * m;
-        res_a2 += *(b_data + 2) * m;
-        res_a3 += *(b_data + 3) * m;
+        alignas(16) number_t nvec[4] = {n, n, n, n};
+        alignas(16) number_t mvec[4] = {m, m, m, m};
 
-        *c_data       = res_a0;
-        *(c_data + 1) = res_a1;
-        *(c_data + 2) = res_a2;
-        *(c_data + 3) = res_a3;
-        
-        a_data += 4;
-        b_data += 4;
-        c_data += 4;
+        vn.v = _mm_load_ps(nvec);
+        vm.v = _mm_load_ps(mvec);
+
+        for (; i < size; i += 4)
+        {
+            va.v = _mm_load_ps(a_data + i);
+            vb.v = _mm_load_ps(b_data + i);
+            vc.v = _mm_setzero_ps();
+
+            vc.v = _mm_add_ps(_mm_mul_ps(va.v, vn.v), _mm_mul_ps(vb.v, vm.v));
+            _mm_store_ps(c_data + i, vc.v);
+        }
     }
 
     // Add the rest of the elements
     for (;i < size; i++, a_data++, b_data++, c_data++) {
         *c_data += *a_data * n + *b_data * m;
     }
+
+    // for (;i < size; i++, a_data++, b_data++, c_data++) {
+    //     *c_data += *a_data * n + *b_data * m;
+    // }
+
+    // double res_a0, res_a1, res_a2, res_a3;
+    
+    // res_a0 = 0.0;
+    // res_a1 = 0.0;
+    // res_a2 = 0.0;
+    // res_a3 = 0.0;
+    
+    // for (; i < size; i += 4)
+    // {
+    //     res_a0 = *a_data * n;
+    //     res_a1 = *(a_data + 1) * n;
+    //     res_a2 = *(a_data + 2) * n;
+    //     res_a3 = *(a_data + 3) * n;
+    
+    //     res_a0 += *b_data * m;
+    //     res_a1 += *(b_data + 1) * m;
+    //     res_a2 += *(b_data + 2) * m;
+    //     res_a3 += *(b_data + 3) * m;
+    
+    //     *c_data       = res_a0;
+    //     *(c_data + 1) = res_a1;
+    //     *(c_data + 2) = res_a2;
+    //     *(c_data + 3) = res_a3;
+    
+    //     a_data += 4;
+    //     b_data += 4;
+    //     c_data += 4;
+    // }
 }
 
 /**
@@ -66,10 +87,19 @@ void cpu_ops::M_add(
 tensor_t cpu_ops::add(tensor_t a, tensor_t b)
 {
     M_assert_tensor_same_size(a, b);
-    tensor_t res(new number_t[a.size()], a.layout());
+    tensor_t res(tensor::aligned_alloc(a.size()), a.layout());
 
     // Perform a tiled addition of the 2 tensors
+    struct timeval start, finish;
+	double gflops = 2.0 * a.size() * 1e-9;
+
+    gettimeofday(&start, NULL);
     M_add(a.data(), b.data(), res.data(), res.size(), 1.0, 1.0);
+    gettimeofday(&finish, NULL);
+
+    double duration = ((double)(finish.tv_sec-start.tv_sec)*1000000 + (double)(finish.tv_usec-start.tv_usec)) / 1000000;
+	printf("add took %f seconds GFLOPS : %f\n",duration,gflops/duration);
+
     return res;
 }
 
@@ -79,7 +109,7 @@ tensor_t cpu_ops::add(tensor_t a, tensor_t b)
 tensor_t cpu_ops::sub(tensor_t a, tensor_t b)
 {
     M_assert_tensor_same_size(a, b);
-    tensor_t res(new number_t[a.size()], a.layout());
+    tensor_t res(tensor::aligned_alloc(a.size()), a.layout());
     M_add(a.data(), b.data(), res.data(), res.size(), 1.0, -1.0);
     return res;
 }
@@ -89,7 +119,7 @@ tensor_t cpu_ops::sub(tensor_t a, tensor_t b)
  */
 tensor_t cpu_ops::mul(tensor_t a, number_t b)
 {
-    tensor_t res(new number_t[a.size()], a.layout());
+    tensor_t res(tensor::aligned_alloc(a.size()), a.layout());
     M_add(a.data(), a.data(), res.data(), res.size(), 0.0, b);
     return res;
 }
@@ -99,7 +129,7 @@ tensor_t cpu_ops::mul(tensor_t a, number_t b)
  */
 tensor_t cpu_ops::div(tensor_t a, number_t b)
 {
-    tensor_t res(new number_t[a.size()], a.layout());
+    tensor_t res(tensor::aligned_alloc(a.size()), a.layout());
     M_add(a.data(), a.data(), res.data(), res.size(), 0.0, 1 / b);
     return res;
 }

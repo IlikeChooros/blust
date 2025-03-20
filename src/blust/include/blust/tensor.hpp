@@ -15,6 +15,7 @@ START_BLUST_NAMESPACE
 
 
 // Main tensor class, can either hold heap memory buffer, or gpu memory pointer
+// The buffer is 16-byte aligned
 class tensor 
 {
 public:
@@ -28,6 +29,17 @@ public:
     typedef union { CUdeviceptr cu_ptr; pointer data; } internal_data;
     enum class data_type { buffer = 1, cuda = 2 };
 
+    static pointer aligned_alloc(size_t count)
+    {
+        size_t padded = ((count * sizeof(number_t) + 16 - 1) / 16) * 16;
+        return static_cast<pointer>(std::aligned_alloc(16, padded * sizeof(number_t)));
+    }
+
+    static void aligned_free(pointer src)
+    {
+        std::free(src);
+    }
+
    /**
     * @brief Create a tensor object
     * @param dim dimensions of the tensor
@@ -37,7 +49,7 @@ public:
     : m_shape(dim)
     {
         auto count      = dim.total();
-        m_tensor.data   = new number_t[count]{};
+        m_tensor.data   = aligned_alloc(count);
         m_data_type     = data_type::buffer;
 
         if (init != 0.0)
@@ -87,7 +99,7 @@ public:
         if (t.m_data_type == data_type::cuda)
         {
             const auto count    = size();
-            m_tensor.data       = new number_t[count];
+            m_tensor.data       = aligned_alloc(count);
             cuMemcpyDtoH(
                 m_tensor.data, t.m_tensor.cu_ptr, 
                 count * sizeof(number_t));
@@ -104,7 +116,7 @@ public:
     ~tensor() noexcept
     {
         if (m_data_type == data_type::buffer) {
-            delete [] m_tensor.data;
+            aligned_free(m_tensor.data);
             m_tensor.data = nullptr;
         }
     }
@@ -191,7 +203,7 @@ private:
         if (count == 0) 
             return 0;
 
-        m_tensor.data       = new number_t[count];
+        m_tensor.data       = aligned_alloc(count);
         return count;
     }
 
