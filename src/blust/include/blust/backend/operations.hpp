@@ -17,7 +17,24 @@ START_BLUST_NAMESPACE
 
 class ops_tensor : public tensor
 {
+    bool m_in_operation = false;
+
+    // Get the tensor based on the 'operation' flag, if a or b is 'in operation'
+    // then borrow their buffer, else create tensor with newly allocated memory
+    static inline ops_tensor M_get_vector_like(ops_tensor& a, ops_tensor& b) noexcept
+    {
+        if (a.in_operation()) 
+            return make_borrowed(a);
+
+        if (b.in_operation()) 
+            return make_borrowed(b);
+        
+        return ops_tensor(a.layout());
+    }
+
 public:
+
+    friend class cpu_ops;
 
     // Get the ops tensor from a tensor
     static ops_tensor get(tensor&& t)
@@ -26,6 +43,15 @@ public:
             return ops_tensor(t.cu_release(), t.layout());
         return ops_tensor(t.release(), t.layout()); // idk if i should do that
     }
+
+    // Create a tensor with shared buffer with 't'
+    static inline tensor make_borrowed(tensor& t)
+    {        
+        t.m_borrowed = true;
+        return tensor(t.data(), t.layout());
+    }    
+
+    ops_tensor() = default;
 
     // Just copy the tensor, tensor under normal cicumstances can't own a cuda pointer anyway
     ops_tensor(const tensor& t) : tensor(t) {}
@@ -43,18 +69,19 @@ public:
     }
 
     // Perform a 'smart' copy
-    ops_tensor(const ops_tensor& other) : tensor(other) {}
+    ops_tensor(const ops_tensor& other) : tensor(other), m_in_operation(other.m_in_operation) {}
     ops_tensor& operator=(const ops_tensor& other)
     {
         if (this != &other)
         {
+            m_in_operation = other.m_in_operation;
             tensor::operator=(other);
         }
         return *this;
     }
 
     // Move constructor
-    ops_tensor(ops_tensor&& other) : tensor(std::move(other)) {}
+    ops_tensor(ops_tensor&& other) : tensor(std::move(other)), m_in_operation(other.m_in_operation) {}
     ops_tensor& operator=(ops_tensor&& other)
     {
         if (this != &other)
@@ -65,8 +92,15 @@ public:
     }
 
     // Get the released pointer
+    ops_tensor(const shape& dim, number_t init = 0.0) : tensor(dim, init) {}
     ops_tensor(tensor::cu_pointer cu_ptr, shape dim) : tensor(cu_ptr, dim) {}
     ops_tensor(tensor::pointer data, shape dim) : tensor(data, dim) {}
+
+    // Return wheter the tensor is in stacked operation
+    inline bool in_operation() const noexcept { return m_in_operation; }
+
+    // Set the flag
+    void set_in_operation(bool ops) noexcept { m_in_operation = ops; }
 };
 
 class operations

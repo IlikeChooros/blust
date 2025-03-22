@@ -29,8 +29,8 @@ void cpu_ops::M_add(
         vec4f_t va, vb, vc, vn, vm;
 
         // Must be aligned
-        alignas(16) number_t nvec[4] = {n, n, n, n};
-        alignas(16) number_t mvec[4] = {m, m, m, m};
+        alignas(tensor::alignment) number_t nvec[4] = {n, n, n, n};
+        alignas(tensor::alignment) number_t mvec[4] = {m, m, m, m};
 
         vn.v = _mm_load_ps(nvec);
         vm.v = _mm_load_ps(mvec);
@@ -56,18 +56,24 @@ void cpu_ops::M_add(
 tensor_t cpu_ops::add(tensor_t a, tensor_t b)
 {
     M_assert_tensor_same_size(a, b);
-    tensor_t res(tensor::aligned_alloc(a.size()), a.layout());
+
+    // Will try to not allocate the memory, since we might be in a chained operation
+    // So 'a' or 'b' may be temporary, it will actually calculte (a or b or c) = a * m + b * m
+    tensor_t res = ops_tensor::M_get_vector_like(a, b);
+    res.set_in_operation(true);
+
+    // tensor_t res(a.layout());
 
     // Perform a tiled addition of the 2 tensors
-    struct timeval start, finish;
-	double gflops = 2.0 * a.size() * 1e-9;
+    // struct timeval start, finish;
+	// double gflops = 2.0 * a.size() * 1e-9;
 
-    gettimeofday(&start, NULL);
+    // gettimeofday(&start, NULL);
     M_add(a.data(), b.data(), res.data(), res.size(), 1.0, 1.0);
-    gettimeofday(&finish, NULL);
+    // gettimeofday(&finish, NULL);
 
-    double duration = ((double)(finish.tv_sec-start.tv_sec)*1000000 + (double)(finish.tv_usec-start.tv_usec)) / 1000000;
-	printf("add took %f seconds GFLOPS : %f\n",duration,gflops/duration);
+    // double duration = ((double)(finish.tv_sec-start.tv_sec)*1000000 + (double)(finish.tv_usec-start.tv_usec)) / 1000000;
+	// printf("add took %f seconds GFLOPS : %f\n",duration,gflops/duration);
 
     return res;
 }

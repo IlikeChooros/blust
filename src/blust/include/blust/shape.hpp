@@ -58,6 +58,11 @@ public:
     // Printing shape
     friend std::ostream& operator<<(std::ostream& out, const shape& s) noexcept
     {
+        if (s.rank() == 0) {
+            out << "shape=none";
+            return out;
+        }
+
         const auto rank = s.rank();
         out << "rank=" << rank << " dim=";
         for (size_t i = 0; i < rank; i++)

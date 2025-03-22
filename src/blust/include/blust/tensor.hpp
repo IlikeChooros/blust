@@ -29,28 +29,68 @@ public:
     typedef union { CUdeviceptr cu_ptr; pointer data; } internal_data;
     enum class data_type { buffer = 1, cuda = 2 };
 
-    static pointer aligned_alloc(size_t count)
+    // Memory alignment
+    static constexpr size_t alignment = 16;
+
+    /**
+     * @brief Get total size in bytes, with given alignment
+     */
+    template <size_t Alignment>
+    static constexpr size_t get_bytesize(size_t count) noexcept
     {
-        size_t padded = ((count * sizeof(number_t) + 16 - 1) / 16) * 16;
-        return static_cast<pointer>(std::aligned_alloc(16, padded * sizeof(number_t)));
+        return ((count * sizeof(number_t) + Alignment - 1) / Alignment ) * Alignment;
     }
 
-    static void aligned_free(pointer src)
+    /**
+     * @brief Get total size in bytes
+     */
+    static constexpr size_t get_bytesize(size_t count) noexcept
+    {
+        return get_bytesize<alignment>(count);
+    }
+
+    /**
+     * @brief Allocates memory with given alignment and number of elements
+     */
+    template <size_t Alignment>
+    static inline pointer aligned_alloc(size_t count) noexcept
+    {
+        return static_cast<pointer>(std::aligned_alloc(Alignment, get_bytesize(count)));
+    }
+
+    /**
+     * @brief Allocate aligned memory with given number of lemenets
+     */
+    static inline pointer aligned_alloc(size_t count) noexcept
+    {
+        return aligned_alloc<alignment>(count);
+    }
+
+    static inline void aligned_free(pointer src) noexcept
     {
         std::free(src);
     }
+
+    // Default c'tor
+    tensor() : 
+        m_shape(), m_tensor(internal_data{0}), 
+        m_data_type(data_type::buffer), m_bytesize(0),
+        m_borrowed(false) {}
+
 
    /**
     * @brief Create a tensor object
     * @param dim dimensions of the tensor
     * @param init initial value for each 'cell' in a tensor
     */
-    tensor(shape dim, number_t init = 0.0) noexcept
+    tensor(const shape& dim, number_t init = 0.0) noexcept
     : m_shape(dim)
     {
         auto count      = dim.total();
+        m_bytesize      = get_bytesize(count);
         m_tensor.data   = aligned_alloc(count);
         m_data_type     = data_type::buffer;
+        m_borrowed      = false;
 
         if (init != 0.0)
             std::fill_n(m_tensor.data, count, init);
@@ -63,10 +103,12 @@ public:
     tensor(tensor&& t) noexcept { void(*this = std::forward<tensor>(t)); }
 
     // Takes the ownership of the `data`, might blow your leg
-    tensor(pointer data, shape dim) noexcept : m_shape(dim)
+    tensor(pointer data, const shape& dim) noexcept : m_shape(dim)
     {
         m_tensor.data   = data;
         m_data_type     = data_type::buffer;
+        m_bytesize      = get_bytesize(m_shape.total());
+        m_borrowed      = false; // the 'borrowed' buffer is not ours
     }
 
     tensor& operator=(const tensor& t) noexcept
@@ -77,7 +119,7 @@ public:
             return *this;
 
         // If that's a cuda pointer, memcpy to this buffer
-        if (t.m_data_type == data_type::cuda) {
+        if (t.m_data_type == data_type::cuda && t.m_tensor.cu_ptr != 0) {
             cuMemcpyDtoH(
                 m_tensor.data, t.m_tensor.cu_ptr, 
                 count * sizeof(number_t));
@@ -92,11 +134,13 @@ public:
 
     tensor& operator=(tensor&& t) noexcept
     {
+        m_bytesize  = t.m_bytesize;
         m_shape     = std::forward<shape>(t.m_shape);
         m_data_type = data_type::buffer;
+        m_borrowed  = false; // since I'm getting the ownership of the pointer
 
         // If that's a cuda pointer, copy the buffer
-        if (t.m_data_type == data_type::cuda)
+        if (t.m_data_type == data_type::cuda && t.m_tensor.cu_ptr != 0)
         {
             const auto count    = size();
             m_tensor.data       = aligned_alloc(count);
@@ -113,8 +157,11 @@ public:
         return *this;
     }
 
-    ~tensor() noexcept
+    virtual ~tensor() noexcept
     {
+        if (m_borrowed)
+            return;
+        
         if (m_data_type == data_type::buffer) {
             aligned_free(m_tensor.data);
             m_tensor.data = nullptr;
@@ -130,6 +177,9 @@ public:
 
     // Get total size of the internall buffer
     size_t size() const noexcept { return m_shape.total(); }
+
+    // Get number of bytes memory holds (doesn't have to be sames as size*sizeof(number_t) since it's aligned)
+    size_t bytesize() const noexcept { return m_bytesize; }
 
     // Get buffer type
     data_type type() const noexcept { return m_data_type; }
@@ -175,10 +225,8 @@ private:
     {
         m_tensor.cu_ptr = cu_ptr;
         m_data_type     = data_type::cuda;
+        m_bytesize      = get_bytesize(m_shape.total());
     }
-
-    // Private default constructor (for ops tensor)
-    tensor() = default;
 
     cu_pointer cu_release() noexcept { return M_release_t<cu_pointer>(); }
     cu_pointer cu_data() const noexcept { return m_tensor.cu_ptr; }
@@ -187,6 +235,8 @@ private:
     shape m_shape;
     internal_data m_tensor;
     data_type m_data_type;
+    size_t m_bytesize;
+    bool m_borrowed;
 
     /**
      * @brief Allocates the buffer with the same size as `t`, copies the dimension, and sets the 
@@ -197,12 +247,15 @@ private:
     {
         const auto count    = t.size();
         m_shape             = t.m_shape;
+        m_borrowed          = false;
         m_data_type         = data_type::buffer; // always use buffer
         m_tensor.data       = nullptr;
+        m_bytesize          = 0;
         
         if (count == 0) 
             return 0;
 
+        m_bytesize          = get_bytesize(count);
         m_tensor.data       = aligned_alloc(count);
         return count;
     }
@@ -251,14 +304,22 @@ private:
     }
 
 
-    // Get the internall buffer, either as a `pointer` or `cu_pointer`
+    // Get the internal buffer, either as a `pointer` or `cu_pointer`
     template <typename T>
     inline std::enable_if_t<std::is_same_v<T, pointer> || std::is_same_v<T, cu_pointer>, T>
     M_release_t() noexcept
     {
         T res;
-        if constexpr (std::is_same_v<T, pointer>) { res = m_tensor.data; m_tensor.data = nullptr; }
-        else { res = m_tensor.cu_ptr; m_tensor.cu_ptr = 0; }
+        if constexpr (std::is_same_v<T, pointer>) { 
+            res = m_tensor.data; 
+            m_tensor.data = nullptr; 
+        }
+        else { 
+            res = m_tensor.cu_ptr; 
+            m_tensor.cu_ptr = 0; 
+        }
+        m_bytesize = 0;
+        m_shape.clear();
         return res;
     }
 };

@@ -10,10 +10,10 @@ void test_result(tensor& a, tensor& b, tensor& c) {
 	auto a_data = a.data();
 	auto b_data = b.data();
 	auto c_data = c.data();
-	auto size = a.size ();
+	auto size = a.size();
 
 	for (size_t i = 0; i < size; i++) {
-		if (fabs(c_data[i] - (a_data[i] * b_data[i])) > 1e-6 ) {
+		if (fabs(c_data[i] - (a_data[i] + b_data[i])) > 1e-6 ) {
 			std::cout << i << ": " << a_data[i] << " + " << b_data[i] << " != " << c_data[i] << std::endl;
 			return;
 		}
@@ -40,13 +40,19 @@ int main(int argc, char** argv)
 	int n = 10000, m = 20000;
 
 	tensor t({n, m}, 1.25);
-	tensor t1({n, m}, 2.5);
+	tensor t1({n, m}, 1.25);
+	tensor t2({n, m}, 1.25);
+	tensor t3({n, m}, 1.25);
 
 
 	// std::cout << t << '\n';
 	// std::cout << t1 << '\n';
-	tensor r = ops->hadamard(t, t1);	
-	test_result(t1, t, r);
+	using namespace std::chrono;
+
+	auto start = high_resolution_clock::now();
+	tensor r = ops->add(ops->add(t, t1), ops->add(t2, t3));	
+	std::cout << "Total: " <<
+		float(duration_cast<microseconds>(high_resolution_clock::now() - start).count()) / 1e6 << "s\n";
 
 	// std::cout << r << '\n';
 
