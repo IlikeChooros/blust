@@ -12,101 +12,134 @@ typedef union {
     float d[4];
 } vec4f_t;
 
+/**
+ * @brief Make the compiler assume that the `data` is n-byte aligned (n = tensor alignment)
+ */
+constexpr void assume_aligned(pointer data) {
+    data = (pointer) __builtin_assume_aligned(data, tensor::alignment);
+}
 
 /**
- * @brief Performs c = a * n + b * m, all pointers should be 16-byte aligned
+ * @brief Performs c = a * n + b * m, a,b and c must be 16-byte aligned
  */
-void cpu_ops::M_add(
-    pointer a_data, pointer b_data, 
-    pointer c_data, size_t size, 
+void cpu_ops::M_impl_add(
+    pointer __restrict a_data, pointer __restrict b_data, 
+    pointer __restrict c_data, size_t size, 
     number_t n, number_t m
 ) noexcept
 {
-    size_t i = 0;
+    assume_aligned(a_data);
+    assume_aligned(b_data);
+    assume_aligned(c_data);
 
-    if (size >= 4)
-    {
-        vec4f_t va, vb, vc, vn, vm;
-
-        // Must be aligned
-        alignas(tensor::alignment) number_t nvec[4] = {n, n, n, n};
-        alignas(tensor::alignment) number_t mvec[4] = {m, m, m, m};
-
-        vn.v = _mm_load_ps(nvec);
-        vm.v = _mm_load_ps(mvec);
-
-        for (; i < size; i += 4)
-        {
-            va.v = _mm_load_ps(a_data + i);
-            vb.v = _mm_load_ps(b_data + i);
-            vc.v = _mm_add_ps(_mm_mul_ps(va.v, vn.v), _mm_mul_ps(vb.v, vm.v));
-            _mm_store_ps(c_data + i, vc.v);
-        }
+    // with -03 and -mavx this is faster
+    while (size--) {
+        (*c_data++) = (*a_data++) * n + (*b_data++) * m;
     }
 
-    // Add the rest of the elements
-    for (;i < size; i++, a_data++, b_data++, c_data++) {
-        *c_data += *a_data * n + *b_data * m;
+    // size_t i = 0;
+
+    // if (size >= 4)
+    // {
+    //     vec4f_t va, vb, vc, vn, vm;
+
+    //     // Must be aligned
+    //     alignas(tensor::alignment) number_t nvec[4] = {n, n, n, n};
+    //     alignas(tensor::alignment) number_t mvec[4] = {m, m, m, m};
+
+    //     vn.v = _mm_load_ps(nvec);
+    //     vm.v = _mm_load_ps(mvec);
+
+    //     for (; i < size; i += 4)
+    //     {
+    //         va.v = _mm_load_ps(a_data + i);
+    //         vb.v = _mm_load_ps(b_data + i);
+    //         vc.v = _mm_add_ps(_mm_mul_ps(va.v, vn.v), _mm_mul_ps(vb.v, vm.v));
+    //         _mm_store_ps(c_data + i, vc.v);
+    //     }
+    // }
+
+    // // Add the rest of the elements
+    // for (;i < size; i++) {
+    //     (*c_data++) += (*a_data++) * n + (*b_data++) * m;
+    // }
+}
+
+/**
+ * @brief Performs c = a * b, a, b and c must be n-byte aligned (n = tensor alignment), 
+ * optimized to use simd instructions
+ */
+void cpu_ops::M_impl_hadamard(
+    pointer __restrict a_data, pointer __restrict b_data, 
+    pointer __restrict c_data, size_t size
+) noexcept
+{
+    assume_aligned(a_data);
+    assume_aligned(b_data);
+    assume_aligned(c_data);
+
+    // with -03 and -mavx this is faster
+    while (size--) {
+        (*c_data++) = (*a_data++) * (*b_data++);
     }
+}
+
+// Get the result tensor, based on the a's and b's operation flags.
+// Asserts same size of a and b, then tries to borrow a's or b's buffers
+inline tensor_t cpu_ops::M_get_res_tensor(tensor_t& a, tensor_t& b)
+{
+    // Assert same size
+    M_assert_tensor_same_size(a, b);
+
+    // Try to borrow buffers, to avoid redundand memory allocation
+    tensor_t res = ops_tensor::M_get_vector_like(a, b);
+
+    // if in chained operation, will use that fact in the function above
+    res.set_in_operation(true); 
+    return res;
+}
+
+/**
+ * @brief Calls `M_impl_add` with these parameters, returns the result tensor
+ */
+inline tensor_t cpu_ops::M_perform_vector_like(tensor_t& a, tensor_t& b, number_t n, number_t m)
+{
+    auto res = M_get_res_tensor(a, b);
+    // calculate the result
+    M_impl_add(a.data(), b.data(), res.data(), res.size(), n, m); 
+    return res;
 }
 
 /**
  * @brief Add two tensors and return the result
  */
-tensor_t cpu_ops::add(tensor_t a, tensor_t b)
+tensor_t cpu_ops::add(tensor_t a, tensor_t b) 
 {
-    M_assert_tensor_same_size(a, b);
-
-    // Will try to not allocate the memory, since we might be in a chained operation
-    // So 'a' or 'b' may be temporary, it will actually calculte (a or b or c) = a * m + b * m
-    tensor_t res = ops_tensor::M_get_vector_like(a, b);
-    res.set_in_operation(true);
-
-    // tensor_t res(a.layout());
-
-    // Perform a tiled addition of the 2 tensors
-    // struct timeval start, finish;
-	// double gflops = 2.0 * a.size() * 1e-9;
-
-    // gettimeofday(&start, NULL);
-    M_add(a.data(), b.data(), res.data(), res.size(), 1.0, 1.0);
-    // gettimeofday(&finish, NULL);
-
-    // double duration = ((double)(finish.tv_sec-start.tv_sec)*1000000 + (double)(finish.tv_usec-start.tv_usec)) / 1000000;
-	// printf("add took %f seconds GFLOPS : %f\n",duration,gflops/duration);
-
-    return res;
+    return M_perform_vector_like(a, b, 1.0, 1.0);
 }
 
 /**
  * @brief Perform substaction (a - b) and return the result
  */
-tensor_t cpu_ops::sub(tensor_t a, tensor_t b)
+tensor_t cpu_ops::sub(tensor_t a, tensor_t b) 
 {
-    M_assert_tensor_same_size(a, b);
-    tensor_t res(tensor::aligned_alloc(a.size()), a.layout());
-    M_add(a.data(), b.data(), res.data(), res.size(), 1.0, -1.0);
-    return res;
+    return M_perform_vector_like(a, b, 1.0, -1.0);
 }
 
 /**
  * @brief Caluculate Ri = Ai * b
  */
-tensor_t cpu_ops::mul(tensor_t a, number_t b)
+tensor_t cpu_ops::mul(tensor_t a, number_t b) 
 {
-    tensor_t res(tensor::aligned_alloc(a.size()), a.layout());
-    M_add(a.data(), a.data(), res.data(), res.size(), 0.0, b);
-    return res;
+    return M_perform_vector_like(a, a, b, 0.0); // c = a * b + a * 0
 }
 
 /**
  * @brief Calculate Ri = Ai / b
  */
-tensor_t cpu_ops::div(tensor_t a, number_t b)
+tensor_t cpu_ops::div(tensor_t a, number_t b) 
 {
-    tensor_t res(tensor::aligned_alloc(a.size()), a.layout());
-    M_add(a.data(), a.data(), res.data(), res.size(), 0.0, 1 / b);
-    return res;
+    return M_perform_vector_like(a, a, 1 / b, 0.0);
 }
 
 /**
@@ -114,37 +147,8 @@ tensor_t cpu_ops::div(tensor_t a, number_t b)
  */
 tensor_t cpu_ops::hadamard(tensor_t a, tensor_t b)
 {
-    M_assert_tensor_same_size(a, b);
-
-    const auto size = a.size();
-    tensor_t res(tensor::aligned_alloc(size), a.layout());
-
-    // Perform a hadamard product of the 2 tensors
-    // Using SIMD instructions
-    
-    auto a_data = a.data();
-    auto b_data = b.data();
-    auto c_data = res.data();
-
-    size_t i = 0;
-    if (size >= 4)
-    {
-        vec4f_t va, vb, vc;
-
-        for (; i < size; i += 4)
-        {
-            va.v = _mm_load_ps(a_data + i);
-            vb.v = _mm_load_ps(b_data + i);
-            vc.v = _mm_mul_ps(va.v, vb.v);
-            _mm_store_ps(c_data + i, vc.v);
-        }
-    }
-
-    // Multiply the rest of the elements
-    for (;i < size; i++, a_data++, b_data++, c_data++) {
-        *c_data += *a_data * *b_data;
-    }
-
+    tensor_t res = M_get_res_tensor(a, b);
+    M_impl_hadamard(a.data(), b.data(), res.data(), res.size());
     return res;
 }
 

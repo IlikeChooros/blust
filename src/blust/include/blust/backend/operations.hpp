@@ -7,14 +7,15 @@
 
 START_BLUST_NAMESPACE
 
-// I can not use the `tensor` here, If I want optimized perfomance on cuda
+// I can not use the `tensor` here, If I want optimized perfomance on cuda and cpu
 // Because I don't know wheter I am in an `operation` or I am just copying the tensor
 // So I should make a indirect object, a middle man, with possible conversion to tensor,
 // and be able to be constructed from a tensor (when user passes the tensor as an argument)
-// Hence I am creating the `ops_tensor`, which will not copy the buffer from gpu device 
+// Hence I am creating the `ops_tensor`, which will not copy the buffer from gpu device or heap memory
 // thus optimizing the perfomance (tensor will always copy the buffer from the gpu)
 
 
+// Helper class for proper memory management inside chained operations
 class ops_tensor : public tensor
 {
     bool m_in_operation = false;
@@ -45,16 +46,16 @@ public:
     }
 
     // Create a tensor with shared buffer with 't'
-    static inline tensor make_borrowed(tensor& t)
-    {        
-        t.m_borrowed = true;
-        return tensor(t.data(), t.layout());
+    static inline ops_tensor make_borrowed(ops_tensor& t)
+    {
+        t.m_shared = true;
+        return ops_tensor(t.data(), t.layout());
     }    
 
     ops_tensor() = default;
 
-    // Just copy the tensor, tensor under normal cicumstances can't own a cuda pointer anyway
-    ops_tensor(const tensor& t) : tensor(t) {}
+    // Borrow the buffer
+    ops_tensor(const tensor& t) { M_borrow(t); }
     ops_tensor(tensor&& t) : tensor(std::forward<tensor>(t)) {}
     ops_tensor& operator=(const tensor& t)
     {
@@ -69,7 +70,12 @@ public:
     }
 
     // Perform a 'smart' copy
-    ops_tensor(const ops_tensor& other) : tensor(other), m_in_operation(other.m_in_operation) {}
+    ops_tensor(const ops_tensor& other) 
+    {
+        M_borrow(other);
+        m_in_operation = other.m_in_operation;
+    }
+
     ops_tensor& operator=(const ops_tensor& other)
     {
         if (this != &other)
@@ -125,13 +131,13 @@ public:
 
 protected:
 
-    void M_assert_tensor_dim_mat_mul(tensor_t& a, tensor_t& b)
+    static void M_assert_tensor_dim_mat_mul(tensor_t& a, tensor_t& b) noexcept(false)
     {
         if ((a.rank() != 2 || b.rank() != 2) || (a.dim()[1] != b.dim()[0]))
             throw std::runtime_error("Invalid tensor dimensions for matrix multiplication");
     }
 
-    void M_assert_tensor_same_size(tensor_t& a, tensor_t& b)
+    static void M_assert_tensor_same_size(tensor_t& a, tensor_t& b) noexcept(false)
     {
         if ((a.rank() != b.rank()) || (a.size() != b.size()))
             throw std::runtime_error("The tensor's size doesn't match");

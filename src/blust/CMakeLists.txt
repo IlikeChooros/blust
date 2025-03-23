@@ -9,6 +9,7 @@ target_sources(blust PRIVATE
  "src/backend/optimized.cpp" 
  "src/datasets/mnist.cpp"
  "src/operations/cpu.cpp"
+ "src/tensor.cpp"
  )
 
 target_link_libraries(blust PUBLIC CUDA::cuda_driver)

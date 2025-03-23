@@ -29,6 +29,10 @@ public:
     typedef union { CUdeviceptr cu_ptr; pointer data; } internal_data;
     enum class data_type { buffer = 1, cuda = 2 };
 
+    static int n_allocs;
+
+    static void inc_alloc(int n = 1) { n_allocs += n; }
+
     // Memory alignment
     static constexpr size_t alignment = 16;
 
@@ -66,6 +70,7 @@ public:
         return aligned_alloc<alignment>(count);
     }
 
+    // Free the aligned memory
     static inline void aligned_free(pointer src) noexcept
     {
         std::free(src);
@@ -75,7 +80,7 @@ public:
     tensor() : 
         m_shape(), m_tensor(internal_data{0}), 
         m_data_type(data_type::buffer), m_bytesize(0),
-        m_borrowed(false) {}
+        m_shared(false) {}
 
 
    /**
@@ -86,11 +91,12 @@ public:
     tensor(const shape& dim, number_t init = 0.0) noexcept
     : m_shape(dim)
     {
+        inc_alloc(1);
         auto count      = dim.total();
         m_bytesize      = get_bytesize(count);
         m_tensor.data   = aligned_alloc(count);
         m_data_type     = data_type::buffer;
-        m_borrowed      = false;
+        m_shared        = false;
 
         if (init != 0.0)
             std::fill_n(m_tensor.data, count, init);
@@ -108,63 +114,21 @@ public:
         m_tensor.data   = data;
         m_data_type     = data_type::buffer;
         m_bytesize      = get_bytesize(m_shape.total());
-        m_borrowed      = false; // the 'borrowed' buffer is not ours
+        m_shared        = false; // the 'borrowed' buffer is not ours
     }
 
-    tensor& operator=(const tensor& t) noexcept
-    {
-        auto count = M_alloc_buffer(t);
-
-        if (count == 0)
-            return *this;
-
-        // If that's a cuda pointer, memcpy to this buffer
-        if (t.m_data_type == data_type::cuda && t.m_tensor.cu_ptr != 0) {
-            cuMemcpyDtoH(
-                m_tensor.data, t.m_tensor.cu_ptr, 
-                count * sizeof(number_t));
-        }
-        else
-        {
-            std::copy_n(t.m_tensor.data, count, m_tensor.data); // will memcpy the buffer
-        }
-
-        return *this;
-    }
-
-    tensor& operator=(tensor&& t) noexcept
-    {
-        m_bytesize  = t.m_bytesize;
-        m_shape     = std::forward<shape>(t.m_shape);
-        m_data_type = data_type::buffer;
-        m_borrowed  = false; // since I'm getting the ownership of the pointer
-
-        // If that's a cuda pointer, copy the buffer
-        if (t.m_data_type == data_type::cuda && t.m_tensor.cu_ptr != 0)
-        {
-            const auto count    = size();
-            m_tensor.data       = aligned_alloc(count);
-            cuMemcpyDtoH(
-                m_tensor.data, t.m_tensor.cu_ptr, 
-                count * sizeof(number_t));
-        }
-        else
-        {
-            // Just release the buffer
-            m_tensor.data = t.release();
-        }
-
-        return *this;
-    }
+    tensor& operator=(const tensor& t) noexcept;
+    tensor& operator=(tensor&& t) noexcept;
 
     virtual ~tensor() noexcept
     {
-        if (m_borrowed)
+        if (m_shared)
             return;
         
-        if (m_data_type == data_type::buffer) {
+        if (m_data_type == data_type::buffer && m_tensor.data != nullptr) {
             aligned_free(m_tensor.data);
             m_tensor.data = nullptr;
+            inc_alloc(-1);
         }
     }
 
@@ -203,20 +167,7 @@ public:
     pointer release() noexcept { return M_release_t<pointer>(); }
     
     // Print the tensor to output stream
-    friend std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept
-    {
-        out << "<tensor: dtype=" << utils::TypeName<number_t>() << " " << t.m_shape << ">\n";
-
-        // print the buffer
-        if (t.m_data_type == data_type::buffer)
-        {
-            auto rank = t.rank();
-            if (rank >= 1)
-                t.M_print_tensor(t, out, rank);
-        }
-        
-        return out;
-    }
+    inline friend std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept;
 
 private:
 
@@ -236,72 +187,28 @@ private:
     internal_data m_tensor;
     data_type m_data_type;
     size_t m_bytesize;
-    bool m_borrowed;
+    bool m_shared;
 
+
+    inline size_t M_alloc_buffer(const tensor& t) noexcept;
+    
     /**
-     * @brief Allocates the buffer with the same size as `t`, copies the dimension, and sets the 
-     * data type to buffer, but DOES NOT COPY THE CONTENT of t's data
-     * @returns t.size() (if 0 then buffer was not allocated and is set to `nullptr`)
+     * @brief Borrow the buffer from given tensor, will share the buffer with 't'
      */
-    inline size_t M_alloc_buffer(const tensor& t) noexcept
+    inline void M_borrow(const tensor& t) noexcept
     {
-        const auto count    = t.size();
-        m_shape             = t.m_shape;
-        m_borrowed          = false;
-        m_data_type         = data_type::buffer; // always use buffer
-        m_tensor.data       = nullptr;
-        m_bytesize          = 0;
-        
-        if (count == 0) 
-            return 0;
-
-        m_bytesize          = get_bytesize(count);
-        m_tensor.data       = aligned_alloc(count);
-        return count;
+        m_shape     = t.m_shape;
+        m_tensor    = t.m_tensor;
+        m_data_type = t.m_data_type;
+        m_bytesize  = t.m_bytesize;
+        m_shared    = true;
     }
 
     // Print the tensor recursively, to given output stream, rank = t.rank(), index = 0, offset = 0
-    static void M_print_tensor(const tensor& t, std::ostream& out, size_t rank, size_t index = 0, size_t offset = 0) noexcept
-    {
-        auto end = t.m_shape.m_dims.at(index);
-
-        // Text tabluation
-        for (size_t p = 0; p < index; p++)
-            out << ' ';
-        
-        // Got 1D representation
-        if (rank == 1)
-        {            
-            out << '[';
-            for (size_t i = 0; i < end; i++)
-            {
-                // print with proper formatting
-                if (i == end - 1)
-                    out << t.m_tensor.data[offset + i];
-                else
-                    out << t.m_tensor.data[offset + i] << ", ";   
-            }
-        }
-        else
-        {
-            out << "[\n";
-            for (size_t i = 0; i < end; i++)
-            {
-                // Go to next dimension of the tensor
-                M_print_tensor(t, out, rank - 1, index + 1, offset + i * t.m_shape.m_dims[index + 1]);
-            }
-
-            // Text tabluation
-            for (size_t p = 0; p < index; p++)
-                out << ' ';
-        }
-
-
-        if (rank != t.rank())
-            out << "],\n";
-        else
-            out << "]\n";
-    }
+    static void M_print_tensor(
+        const tensor& t, std::ostream& out, size_t rank, 
+        size_t index = 0, size_t offset = 0
+    ) noexcept;
 
 
     // Get the internal buffer, either as a `pointer` or `cu_pointer`
@@ -323,7 +230,6 @@ private:
         return res;
     }
 };
-
 
 END_BLUST_NAMESPACE
 

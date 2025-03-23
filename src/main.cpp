@@ -37,24 +37,36 @@ int main(int argc, char** argv)
 	// seq.compile(new SGD(1e-2, 0.9, true));
 	// seq.fit(dataset, labels, 30);
 
-	int n = 10000, m = 20000;
+	// 800MB, 4GB
+
+	int n = 1 * 1e3, m = 2 * 1e3;
 
 	tensor t({n, m}, 1.25);
 	tensor t1({n, m}, 1.25);
 	tensor t2({n, m}, 1.25);
 	tensor t3({n, m}, 1.25);
 
-
-	// std::cout << t << '\n';
-	// std::cout << t1 << '\n';
 	using namespace std::chrono;
 
-	auto start = high_resolution_clock::now();
-	tensor r = ops->add(ops->add(t, t1), ops->add(t2, t3));	
-	std::cout << "Total: " <<
-		float(duration_cast<microseconds>(high_resolution_clock::now() - start).count()) / 1e6 << "s\n";
+	double gflops = 2 * n * m;
+	double seconds;
 
-	// std::cout << r << '\n';
+	auto start = high_resolution_clock::now();
+	
+	tensor r;
+	// for (size_t i = 0; i < 10; i++)
+	// r = ops->add(ops->add(ops->add(t, t1), t1), ops->add(ops->add(t2, t3), t3));
+	r = ops->add(t, t1);
+
+	seconds = float(duration_cast<microseconds>(high_resolution_clock::now() - start).count()) / 1e6;
+	gflops  = gflops / (seconds) / 1e9;
+
+	std::cout << "time=" << seconds << "s gflops="<< gflops << " n_allocs=" << tensor::n_allocs << "\n";
+	std::cout << "Press enter...\n";
+	
+	
+	std::string ent;
+	std::cin >> ent;
 
 	return 0;
 }

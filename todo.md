@@ -12,6 +12,7 @@ instead just check if the previous size is enough, if not, allocate new memory.
 - [ ] Create an ops backend, with python like functions for performing calculations on tensors (right now only on 1D, 2D)
 - [ ] Should use best libraries for matrix operations (cublas, gemm)
 - [ ] Should support target device (either cpu or cuda)
+- [ ] Make the cpu handle tensors with && and & for better performance
 
 For example:
 
