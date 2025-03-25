@@ -25,6 +25,19 @@ class cpu_ops : public operations
         size_t size, number_t, number_t
     ) noexcept(true);
 
+    static void M_add_dot_4x4(
+        pointer __restrict a, pointer __restrict b, 
+        pointer __restrict c, size_t n, 
+        size_t lda, size_t ldb, size_t ldc
+    ) noexcept(true);
+
+    static void M_impl_matumul(
+        pointer __restrict a, size_t lda, 
+        pointer __restrict b, size_t ldb,
+        pointer __restrict c, size_t ldc,
+        size_t n, size_t m, size_t k
+    ) noexcept(true);
+
     // Calls M_add with these parameters
     inline tensor_t M_perform_vector_like(
         tensor_t& a, tensor_t& b, number_t n, number_t m,

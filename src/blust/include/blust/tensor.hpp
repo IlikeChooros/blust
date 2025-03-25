@@ -137,6 +137,16 @@ public:
     // Check wheter internal buffer is stored in gpu memory
     bool is_cuda() const noexcept { return m_data_type == data_type::cuda; }
 
+    // fill the tensor with given predicate
+    void fill(std::function<number_t()> f) noexcept {
+        std::generate_n(m_tensor.data, m_shape.total(), f);
+    }
+
+    // fill the tensor with given value
+    void fill(number_t val) noexcept {
+        std::fill_n(m_tensor.data, m_shape.total(), val);
+    }
+
     // Check if the tensor is empty
     bool empty() const noexcept 
     {
@@ -153,7 +163,7 @@ public:
     pointer release() noexcept { return M_release_t<pointer>(); }
     
     // Print the tensor to output stream
-    inline friend std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept;
+    friend std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept;
 
 private:
 

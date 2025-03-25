@@ -100,7 +100,7 @@ tensor& tensor::operator=(tensor&& t) noexcept
     return *this;
 }
 
-inline std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept
+std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept
 {
     out << "<tensor: dtype=" << utils::TypeName<number_t>() << " " << t.m_shape << ">\n";
 

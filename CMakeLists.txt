@@ -3,8 +3,24 @@ cmake_minimum_required(VERSION 3.4)
 project(BlustDL LANGUAGES C CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "-Wall -O3 -ffast-math -mavx2")
-# -O3 -ffast-math -mavx2
+
+set(GNU_RELEASE_FLAGS "-O3 -ffast-math -mavx2 -mfma -march=native -mtune=native")
+set(WIN_RELEASE_FLAGS "/O2 /arch:AVX2 /fp:fast")
+set(GNU_DEBUG_FLAGS "-O0 -g")
+set(WIN_DEBUG_FLAGS "/Od /Zi")
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${GNU_RELEASE_FLAGS}")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${GNU_DEBUG_FLAGS}")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${WIN_RELEASE_FLAGS}")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${WIN_DEBUG_FLAGS}")
+endif()
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 
