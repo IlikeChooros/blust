@@ -4,9 +4,9 @@ project(BlustDL LANGUAGES C CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 
-set(GNU_RELEASE_FLAGS "-O3 -ffast-math -mavx2 -mfma -march=native -mtune=native")
+set(GNU_RELEASE_FLAGS "-O3 -ffast-math -march=x86-64-v3 ")
 set(WIN_RELEASE_FLAGS "/O2 /arch:AVX2 /fp:fast")
-set(GNU_DEBUG_FLAGS "-O0 -g")
+set(GNU_DEBUG_FLAGS "-O0 -g -march=x86-64-v3")
 set(WIN_DEBUG_FLAGS "/Od /Zi")
 
 if(NOT CMAKE_BUILD_TYPE)

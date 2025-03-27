@@ -37,41 +37,58 @@ void cpu_ops::M_impl_add(
     number_t n, number_t m
 ) noexcept
 {
-    assume_aligned(a_data);
-    assume_aligned(b_data);
-    assume_aligned(c_data);
+    // assume_aligned(a_data);
+    // assume_aligned(b_data);
+    // assume_aligned(c_data);
 
     // with -03 and -mavx2 this is faster
-    while (size--) {
-        (*c_data++) = (*a_data++) * n + (*b_data++) * m;
+    // while (size--) {
+    //     (*c_data++) = (*a_data++) * n + (*b_data++) * m;
+    // }
+
+    size_t i = 0;
+    if (size >= 4 * 8)
+    {
+        // SIMD version with 4 avx2 vectors
+        vec8f_t va0, va1, va2, va3,
+                vb0, vb1, vb2, vb3,
+                vc0, vc1, vc2, vc3,
+                vn, vm;
+
+        vn.v = _mm256_set1_ps(n);
+        vm.v = _mm256_set1_ps(m);
+
+        for (; i < size; i += 4 * 8)
+        {
+            if (size - i < 4 * 8)
+                break;
+
+            va0.v = _mm256_load_ps(a_data + i);
+            va1.v = _mm256_load_ps(a_data + i + 8);
+            va2.v = _mm256_load_ps(a_data + i + 16);
+            va3.v = _mm256_load_ps(a_data + i + 24);
+
+            vb0.v = _mm256_load_ps(b_data + i);
+            vb1.v = _mm256_load_ps(b_data + i + 8);
+            vb2.v = _mm256_load_ps(b_data + i + 16);
+            vb3.v = _mm256_load_ps(b_data + i + 24);
+
+            vc0.v = _mm256_add_ps(_mm256_mul_ps(va0.v, vn.v), _mm256_mul_ps(vb0.v, vm.v));
+            vc1.v = _mm256_add_ps(_mm256_mul_ps(va1.v, vn.v), _mm256_mul_ps(vb1.v, vm.v));
+            vc2.v = _mm256_add_ps(_mm256_mul_ps(va2.v, vn.v), _mm256_mul_ps(vb2.v, vm.v));
+            vc3.v = _mm256_add_ps(_mm256_mul_ps(va3.v, vn.v), _mm256_mul_ps(vb3.v, vm.v));
+
+            _mm256_store_ps(c_data + i, vc0.v);
+            _mm256_store_ps(c_data + i + 8, vc1.v);
+            _mm256_store_ps(c_data + i + 16, vc2.v);
+            _mm256_store_ps(c_data + i + 24, vc3.v);
+        }
     }
 
-    // size_t i = 0;
-
-    // if (size >= 4)
-    // {
-    //     vec8f_t va, vb, vc, vn, vm;
-
-    //     // Must be aligned
-    //     alignas(tensor::alignment) number_t nvec[8] = {n, n, n, n, n, n, n, n};
-    //     alignas(tensor::alignment) number_t mvec[8] = {m, m, m, m, m, m, m, m};
-
-    //     vn.v = _mm256_load_ps(nvec);
-    //     vm.v = _mm256_load_ps(mvec);
-
-    //     for (; i < size; i += 8)
-    //     {
-    //         va.v = _mm256_load_ps(a_data + i);
-    //         vb.v = _mm256_load_ps(b_data + i);
-    //         vc.v = _mm256_add_ps(_mm256_mul_ps(va.v, vn.v), _mm256_mul_ps(vb.v, vm.v));
-    //         _mm256_store_ps(c_data + i, vc.v);
-    //     }
-    // }
-
-    // // Add the rest of the elements
-    // for (;i < size; i++) {
-    //     (*c_data++) += (*a_data++) * n + (*b_data++) * m;
-    // }
+    // Add the rest of the elements
+    for(; i < size; i++) {
+        (*c_data++) += (*a_data++) * n + (*b_data++) * m;
+    }    
 }
 
 /**
@@ -98,7 +115,67 @@ constexpr pointer M(pointer m, size_t ldm, size_t y, size_t x) noexcept {
     return m + y * ldm + x;
 }
 
-void cpu_ops::M_add_dot_4x4(
+void cpu_ops::M_add_kernel_dot_8x8(
+    pointer __restrict a, pointer __restrict b, 
+    pointer __restrict c, size_t n, 
+    size_t lda, size_t ldb, size_t ldc
+) noexcept
+{
+    vec8f_t 
+        va0, va1, va2, va3, va4, va5, va6, va7, // 8 row with 8 elements of equal value
+        vb, // column with 8 elements
+        vc0, vc1, vc2, vc3, vc4, vc5, vc6, vc7;  // 8 rows of c (with 8 elements)
+
+    vc0.v = _mm256_loadu_ps(M(c, ldc, 0, 0));
+    vc1.v = _mm256_loadu_ps(M(c, ldc, 1, 0));
+    vc2.v = _mm256_loadu_ps(M(c, ldc, 2, 0));
+    vc3.v = _mm256_loadu_ps(M(c, ldc, 3, 0));
+    vc4.v = _mm256_loadu_ps(M(c, ldc, 4, 0));
+    vc5.v = _mm256_loadu_ps(M(c, ldc, 5, 0));
+    vc6.v = _mm256_loadu_ps(M(c, ldc, 6, 0));
+    vc7.v = _mm256_loadu_ps(M(c, ldc, 7, 0));
+
+    for(size_t i = 0; i < n; i++)
+    {
+        // Load the row of a
+        va0.v = _mm256_set1_ps(*M(a, lda, 0, i));
+        va1.v = _mm256_set1_ps(*M(a, lda, 1, i));
+        va2.v = _mm256_set1_ps(*M(a, lda, 2, i));
+        va3.v = _mm256_set1_ps(*M(a, lda, 3, i));
+        va4.v = _mm256_set1_ps(*M(a, lda, 4, i));
+        va5.v = _mm256_set1_ps(*M(a, lda, 5, i));
+        va6.v = _mm256_set1_ps(*M(a, lda, 6, i));
+        va7.v = _mm256_set1_ps(*M(a, lda, 7, i));
+        
+        // Load the column of b
+        vb.v = _mm256_loadu_ps(M(b, ldb, i, 0));
+        // b0, b1, b2, b3
+
+        vc0.v = _mm256_add_ps(vc0.v, _mm256_mul_ps(va0.v, vb.v));
+        // c00 = a0 * b0, c01 = a0 * b1, c02 = a0 * b2, c03 = a0 * b3
+
+        // same for the rest of the rows
+        vc1.v = _mm256_add_ps(vc1.v, _mm256_mul_ps(va1.v, vb.v));
+        vc2.v = _mm256_add_ps(vc2.v, _mm256_mul_ps(va2.v, vb.v));
+        vc3.v = _mm256_add_ps(vc3.v, _mm256_mul_ps(va3.v, vb.v));
+        vc4.v = _mm256_add_ps(vc4.v, _mm256_mul_ps(va4.v, vb.v));
+        vc5.v = _mm256_add_ps(vc5.v, _mm256_mul_ps(va5.v, vb.v));
+        vc6.v = _mm256_add_ps(vc6.v, _mm256_mul_ps(va6.v, vb.v));
+        vc7.v = _mm256_add_ps(vc7.v, _mm256_mul_ps(va7.v, vb.v));
+    }
+
+    // Store the result (8 rows of c with 8 elements)
+    _mm256_storeu_ps(M(c, ldc, 0, 0), vc0.v);
+    _mm256_storeu_ps(M(c, ldc, 1, 0), vc1.v);
+    _mm256_storeu_ps(M(c, ldc, 2, 0), vc2.v);
+    _mm256_storeu_ps(M(c, ldc, 3, 0), vc3.v);
+    _mm256_storeu_ps(M(c, ldc, 4, 0), vc4.v);
+    _mm256_storeu_ps(M(c, ldc, 5, 0), vc5.v);
+    _mm256_storeu_ps(M(c, ldc, 6, 0), vc6.v);
+    _mm256_storeu_ps(M(c, ldc, 7, 0), vc7.v);
+}
+
+void cpu_ops::M_add_kernel_dot_4x4(
     pointer __restrict a, pointer __restrict b, 
     pointer __restrict c, size_t n, 
     size_t lda, size_t ldb, size_t ldc
@@ -111,8 +188,8 @@ void cpu_ops::M_add_dot_4x4(
     vec4f_t 
         va0, va1, va2, va3, // 4 row with 4 elements of equal value
         vb, // column with 4 elements
-        vc0, vc1, vc2, vc3; // 4 rows of c (with 4 elements)
-    
+        vc0, vc1, vc2, vc3;  // 4 rows of c (with 4 elements)
+
     vc0.v = _mm_load_ps(M(c, ldc, 0, 0));
     vc1.v = _mm_load_ps(M(c, ldc, 1, 0));
     vc2.v = _mm_load_ps(M(c, ldc, 2, 0));
@@ -130,7 +207,7 @@ void cpu_ops::M_add_dot_4x4(
         vb.v = _mm_load_ps(M(b, ldb, i, 0));
         // b0, b1, b2, b3
 
-        vc0.v = _mm_add_ps(vc0.v, _mm_mul_ps(va0.v, vb.v));\
+        vc0.v = _mm_add_ps(vc0.v, _mm_mul_ps(va0.v, vb.v));
         // c00 = a0 * b0, c01 = a0 * b1, c02 = a0 * b2, c03 = a0 * b3
 
         // same for the rest of the rows
@@ -139,13 +216,108 @@ void cpu_ops::M_add_dot_4x4(
         vc3.v = _mm_add_ps(vc3.v, _mm_mul_ps(va3.v, vb.v));
     }
 
-    // Store the result (4 rows of c with 4 elements)
+    // Store the result (4 rows of c with
     _mm_store_ps(M(c, ldc, 0, 0), vc0.v);
     _mm_store_ps(M(c, ldc, 1, 0), vc1.v);
     _mm_store_ps(M(c, ldc, 2, 0), vc2.v);
     _mm_store_ps(M(c, ldc, 3, 0), vc3.v);
 }
 
+template <size_t kernel_size>
+void cpu_ops::M_inner_kernel(
+    size_t m, size_t n, size_t k, pointer __restrict a, 
+    pointer __restrict b, pointer __restrict c, 
+    size_t lda, size_t ldb, size_t ldc, cpu_ops::func_kernel_dot_t kernel
+) noexcept
+{
+    size_t cols = 0, rows = 0;
+
+    for (; rows < m; rows+=kernel_size) // loop over the columns of c (and b's)
+    {
+        if (rows + kernel_size > m) 
+            break;
+        
+        for (cols = 0; cols < k; cols+=kernel_size) // loop over the rows of c (and a's)
+        {
+            if (cols + kernel_size > k) 
+                break;
+
+            // Calculate the dot product of the ith row of A
+            // and the jth column of B
+            kernel(
+                M(a, lda, rows, 0),
+                M(b, ldb, 0, cols),
+                M(c, ldc, rows, cols),
+                n, lda, ldb, ldc
+            );
+        }
+    }
+
+    // loop over the rest of rows
+    for (; rows < m; rows++)
+    {
+        for (cols = 0; cols < k; cols++)
+        {
+            number_t sum = 0;
+            for (size_t l = 0; l < n; l++)
+                sum += *M(a, lda, rows, l) * *M(b, ldb, l, cols);
+            (*M(c, ldc, rows, cols)) = sum;
+        }
+    }
+
+    // loop over the rest of columns
+    size_t rest = k % kernel_size;
+    if (rest == 0)
+        return;
+    
+    rest = k - rest;
+    for (rows = 0; rows < m; rows++)
+    {
+        for (cols = rest; cols < k; cols++)
+        {
+            number_t sum = 0;
+            for (size_t l = 0; l < n; l++)
+                sum += *M(a, lda, rows, l) * *M(b, ldb, l, cols);
+            (*M(c, ldc, rows, cols)) = sum;
+        }
+    }
+}
+
+template <size_t kernel_size>
+void cpu_ops::M_calc_kernel_dot(
+    pointer __restrict a, pointer __restrict b, 
+    pointer __restrict c, cpu_ops::func_kernel_dot_t kernel,
+    size_t m, size_t n, size_t k, size_t lda, size_t ldb, size_t ldc
+) noexcept
+{
+    M_inner_kernel<kernel_size>(
+        m, n, k, a, b, c, lda, ldb, ldc, kernel
+    );
+
+    // constexpr size_t pack_size_m = 256, pack_size_n = 128;
+
+    // size_t packed_m, packed_n;
+
+    // for (size_t i = 0; i < n; i += pack_size_n)
+    // {
+    //     packed_n = std::min(pack_size_n, n - i);
+    //     for (size_t j = 0; j < m; j += pack_size_m)
+    //     {
+    //         packed_m = std::min(pack_size_m, m - j);
+    //         M_inner_kernel<kernel_size>(
+    //             packed_m, packed_n, k,
+    //             M(a, lda, j, i), M(b, ldb, i, 0), 
+    //             M(c, ldc, j, 0),
+    //             lda, ldb, ldc, kernel
+    //         );
+    //     }
+    // }
+}
+
+
+// I know this is pointless, since if the cpu doesn't support avx2,
+// it won't compile (i think), but I want to keep the code clean
+template <cpu_ops::matmul_type type>
 void cpu_ops::M_impl_matumul(
     pointer __restrict a, size_t lda, 
     pointer __restrict b, size_t ldb,
@@ -153,40 +325,10 @@ void cpu_ops::M_impl_matumul(
     size_t m, size_t n, size_t k
 ) noexcept
 {
-    size_t i = 0, j = 0;
-
-    for (; i < k; i+=4) // loop over the columns of c (and b's)
-    {
-        if (i + 4 > k) 
-            break;
-
-        for (j = 0; j < m; j+=4) // loop over the rows of c (and a's)
-        {
-            if (j + 4 > m) 
-                break;
-
-            // Calculate the dot product of the ith row of A
-            // and the jth column of B
-            M_add_dot_4x4(
-                M(a, lda, j, 0),
-                M(b, ldb, 0, i),
-                M(c, ldc, j, i),
-                n, lda, ldb, ldc
-            );
-        }
-    }
-
-    // loop over the rest of the columns
-    for (; i < k; i++)
-    {
-        for (j = 0; j < m; j++)
-        {
-            number_t sum = 0;
-            for (size_t l = 0; l < n; l++)
-                sum += *M(a, lda, j, l) * *M(b, ldb, l, i);
-            (*M(c, ldc, j, i)) = sum;
-        }
-    }
+    if constexpr (type == matmul_type::avx2)
+        M_calc_kernel_dot<8>(a, b, c, M_add_kernel_dot_8x8, m, n, k, lda, ldb, ldc);
+    else
+        M_calc_kernel_dot<4>(a, b, c, M_add_kernel_dot_4x4, m, n, k, lda, ldb, ldc);
 }
 
 
@@ -302,7 +444,7 @@ tensor_t cpu_ops::mat_mul(tensor_t a, tensor_t b)
 
     auto res = ops_tensor({m_rows, k_cols});
     
-    M_impl_matumul(
+    M_impl_matumul<cpu_ops::matmul_type::avx2>(
         a.data(), n_cols,
         b.data(), k_cols,
         res.data(), k_cols,

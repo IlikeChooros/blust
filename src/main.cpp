@@ -12,7 +12,7 @@ void test_result(tensor& a, tensor& b, tensor& c) {
 	auto size = a.size();
 
 	for (size_t i = 0; i < size; i++) {
-		if (fabs(c_data[i] - (8.0 /*a_data[i] + b_data[i]*/)) > 1e-6 ) {
+		if (fabs(c_data[i] - (a_data[i] + b_data[i])) > 1e-2 ) {
 			std::cout << i << ": " << a_data[i] << " + " << b_data[i] << " != " << c_data[i] << std::endl;
 			return;
 		}
@@ -52,7 +52,10 @@ void test_mat_mul(tensor& a, tensor& b, tensor& c)
 	auto size = r.size();
 	for (size_t i = 0; i < size; i++) {
 		if (fabs(r_data[i] - c_data[i]) > 1e-2 ) {
-			std::cout << i << ": " << r_data[i] << " != " << c_data[i] << std::endl;
+
+			std::cout 
+					<< "(" << i / k << ", " << i % k << ") (test != result) " 
+					<< r_data[i] << " != " << c_data[i] << '\n';
 			return;
 		}
 	}
@@ -65,25 +68,22 @@ int main(int argc, char** argv)
     init(argc, argv, "");
 
 	// int n = 1 * 1e1, m = 1 * 1e1;
-	constexpr int n = 4e2, m = 8e2, k = 5e2;
+	constexpr long long n = 8e3, m = 8e3, k = 4e0;
+	constexpr size_t bytes_size = sizeof(number_t) * (n * m + n * k + m * k);
 
 	// tensor t({n, m}, 2);
-	tensor t1({n, m}, 2);
-	tensor t2({m, k}, 2);
+	tensor t1({m, n}, 2);
+	tensor t2({m, n}, 2);
 	// tensor t3({n, m}, 2);
 
 	using namespace std::chrono;
 
-	double gflops = 2 * n * m * k;
+	double gflops = 2 * n * m;
 	double seconds;
 	
 	tensor r;
-	// for (size_t i = 0; i < 25; i++)
-	// // r = ops->add(t, t1);
-	// r = ops->add(ops->hadamard(t, t1), ops->hadamard(t2, t3));
 	number_t i = 1;
 
-	
 	if (n < MAX_PRINT_DIM && m < MAX_PRINT_DIM && k < MAX_PRINT_DIM)
 	{
 		t1.fill([&i](){ return i++; });
@@ -100,27 +100,32 @@ int main(int argc, char** argv)
 		t2.fill([&dist, &gen](){ return dist(gen); });
 	}
 
+	std::cout << "Size: " << bytes_size / 1e6 << "MB\n";
+	std::cout << "Starting...\n";
+
 	auto start = high_resolution_clock::now();
+	constexpr size_t n_iter = 25;
+	for (i = 0; i < n_iter; i++)
+		r = ops->add(t1, t2);
 
-	constexpr size_t n_iter = 10;
-	for (size_t i = 0; i < n_iter; i++)
-		r = ops->mat_mul(t1, t2);
-
-	seconds = float(duration_cast<microseconds>(high_resolution_clock::now() - start).count()) / 1e6 / n_iter;
+	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / 25;
 	gflops  = gflops / (seconds) / 1e9;
 
 	if (n < MAX_PRINT_DIM && m < MAX_PRINT_DIM && k < MAX_PRINT_DIM)
 		std::cout << r << '\n';
 
-	// test_result(t, t1, r);
-	test_mat_mul(t1, t2, r);
-
 	std::cout 
-	<< "time=" << seconds
-	 << "s gflops="<< gflops 
-	 << " n_allocs=" << tensor::n_allocs 
-	 << " max_allocs=" << tensor::max_allocs
-	 << "\n";
+		<< "time=" << seconds
+			<< "s gflops="<< gflops 
+			<< " n_allocs=" << tensor::n_allocs 
+			<< " max_allocs=" << tensor::max_allocs
+			<< "\n";
+	
+	std::cout << "Testing result...\n";
+
+	test_result(t1, t2, r);
+	// test_mat_mul(t1, t2, r);
+
 	std::cout << "Press enter...\n";
 	
 	std::string ent;

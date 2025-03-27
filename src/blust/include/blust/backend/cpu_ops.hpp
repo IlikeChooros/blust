@@ -13,6 +13,10 @@ class cpu_ops : public operations
 {
     typedef tensor_t::pointer pointer;
     typedef void(*func_vector_t)(pointer, pointer, pointer, size_t, number_t, number_t);
+    typedef void(*func_kernel_dot_t)(
+        pointer __restrict, pointer __restrict, 
+        pointer __restrict, size_t, size_t, size_t, size_t
+    );
 
     // Preformns c = a * n + b * m
     static void M_impl_add(
@@ -25,12 +29,37 @@ class cpu_ops : public operations
         size_t size, number_t, number_t
     ) noexcept(true);
 
-    static void M_add_dot_4x4(
+    template <size_t kernel_size>
+    static void M_inner_kernel(
+        size_t m, size_t n, size_t k, pointer __restrict a, 
+        pointer __restrict b, pointer __restrict c, 
+        size_t lda, size_t ldb, size_t ldc, func_kernel_dot_t kernel
+    ) noexcept(true);
+
+    // With AVX2 instructions
+    static void M_add_kernel_dot_8x8(
         pointer __restrict a, pointer __restrict b, 
         pointer __restrict c, size_t n, 
         size_t lda, size_t ldb, size_t ldc
     ) noexcept(true);
 
+    // For older CPUs
+    static void M_add_kernel_dot_4x4(
+        pointer __restrict a, pointer __restrict b, 
+        pointer __restrict c, size_t n, 
+        size_t lda, size_t ldb, size_t ldc
+    ) noexcept(true);
+
+    template <size_t kernel_size>
+    static void M_calc_kernel_dot(
+        pointer __restrict a, pointer __restrict b, 
+        pointer __restrict c, cpu_ops::func_kernel_dot_t kernel,
+        size_t m, size_t n, size_t k, size_t lda, size_t ldb, size_t ldc
+    ) noexcept(true);
+
+    enum class matmul_type { avx2, see };
+
+    template <matmul_type type = matmul_type::avx2>
     static void M_impl_matumul(
         pointer __restrict a, size_t lda, 
         pointer __restrict b, size_t ldb,
