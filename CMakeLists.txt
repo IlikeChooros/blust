@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.4)
 
 project(BlustDL LANGUAGES C CXX CUDA)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 set(GNU_RELEASE_FLAGS "-O3 -ffast-math -march=x86-64-v3 ")
 set(WIN_RELEASE_FLAGS "/O2 /arch:AVX2 /fp:fast")

@@ -68,13 +68,14 @@ int main(int argc, char** argv)
     init(argc, argv, "");
 
 	// int n = 1 * 1e1, m = 1 * 1e1;
-	constexpr long long n = 8e3, m = 8e3, k = 4e0;
-	constexpr size_t bytes_size = sizeof(number_t) * (n * m + n * k + m * k);
+	constexpr long long n = 8e3, m = 8e2, k = 4e0;
+	size_t bytes_size;
 
-	// tensor t({n, m}, 2);
+	tensor t({n, m}, 2);
 	tensor t1({m, n}, 2);
 	tensor t2({m, n}, 2);
-	// tensor t3({n, m}, 2);
+
+	bytes_size = t1.bytesize() + t2.bytesize();
 
 	using namespace std::chrono;
 
@@ -107,6 +108,14 @@ int main(int argc, char** argv)
 	constexpr size_t n_iter = 25;
 	for (i = 0; i < n_iter; i++)
 		r = ops->add(t1, t2);
+
+	ops->add(t1, t2);
+	
+	r = ops->add(ops->mat_mul(t1, t2), t);
+
+	// M1 * M2  + M3 - M4 
+
+	// R1 + (M3 - M4)
 
 	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / 25;
 	gflops  = gflops / (seconds) / 1e9;

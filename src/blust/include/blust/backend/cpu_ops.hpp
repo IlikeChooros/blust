@@ -92,15 +92,15 @@ class cpu_ops : public operations
     std::vector<std::thread> m_threads;
 
 public:
-    cpu_ops(int n_threads = 1) : m_ncores(n_threads) {}
+    cpu_ops(int n_threads = 1) : m_ncores(std::max<int>(1, n_threads)) {}
 
-    tensor_t add(tensor_t, tensor_t);
-    tensor_t sub(tensor_t, tensor_t);
-    tensor_t mul(tensor_t, number_t);
-    tensor_t div(tensor_t, number_t);
+    tensor_rref_t add(tensor_t, tensor_t) override;
+    tensor_rref_t sub(tensor_t, tensor_t) override;
+    tensor_rref_t mul(tensor_t, number_t) override;
+    tensor_rref_t div(tensor_t, number_t) override;
 
-    tensor_t hadamard(tensor_t, tensor_t);
-    tensor_t mat_mul(tensor_t, tensor_t);
+    tensor_rref_t hadamard(tensor_t, tensor_t) override;
+    tensor_rref_t mat_mul(tensor_t, tensor_t) override;
 };
 
 END_BLUST_NAMESPACE

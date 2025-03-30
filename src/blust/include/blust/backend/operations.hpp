@@ -113,21 +113,23 @@ class operations
 {
 public:
     typedef ops_tensor tensor_t;
+    typedef ops_tensor tensor_rref_t;
+    typedef std::function<tensor_rref_t(tensor_t, tensor_t)> func_t;
 
     operations() = default;
     virtual ~operations() = default;
 
     // Any tensor rank operations
-    virtual tensor_t sub(tensor_t, tensor_t) = 0;
-    virtual tensor_t add(tensor_t, tensor_t) = 0;
-    virtual tensor_t mul(tensor_t, number_t) = 0;
-    virtual tensor_t div(tensor_t, number_t) = 0;
+    virtual tensor_rref_t sub(tensor_t, tensor_t) = 0;
+    virtual tensor_rref_t add(tensor_t, tensor_t) = 0;
+    virtual tensor_rref_t mul(tensor_t, number_t) = 0;
+    virtual tensor_rref_t div(tensor_t, number_t) = 0;
 
     // 1D operations
-    virtual tensor_t hadamard(tensor_t, tensor_t) = 0;
+    virtual tensor_rref_t hadamard(tensor_t, tensor_t) = 0;
 
     // 2D operations
-    virtual tensor_t mat_mul(tensor_t, tensor_t) = 0;
+    virtual tensor_rref_t mat_mul(tensor_t, tensor_t) = 0;
 
 protected:
 

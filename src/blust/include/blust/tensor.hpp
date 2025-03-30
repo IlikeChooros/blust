@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <numeric>
 #include <memory>
+#include <variant>
 
 #include <cuda.h>
 
@@ -12,6 +13,9 @@
 #include "shape.hpp"
 
 START_BLUST_NAMESPACE
+
+template <typename T>
+concept IsPointerOrCU = std::is_same_v<T, number_t*> || std::is_same_v<T, CUdeviceptr>;
 
 
 // Main tensor class, can either hold heap memory buffer, or gpu memory pointer
@@ -24,9 +28,11 @@ public:
     friend class ops_tensor;
 
     typedef CUdeviceptr cu_pointer;
+    typedef CUdeviceptr& cu_pointer_ref;
     typedef number_t* pointer;
     typedef const pointer const_pointer;
-    typedef union { CUdeviceptr cu_ptr; pointer data; } internal_data;
+
+    typedef std::variant<cu_pointer, pointer> internal_data; 
     enum class data_type { buffer = 1, cuda = 2 };
 
     static int n_allocs;
@@ -93,10 +99,11 @@ public:
         inc_alloc(1);
         auto count      = dim.total();
         m_bytesize      = get_bytesize(count);
-        m_tensor.data   = aligned_alloc(count);
+        m_data_type     = data_type::buffer;
+        m_tensor        = aligned_alloc(count);
 
         if (init != 0.0)
-            std::fill_n(m_tensor.data, count, init);
+            std::fill_n(std::get<pointer>(m_tensor), count, init);
     }
 
     // Copy constructor
@@ -108,9 +115,9 @@ public:
     // Takes the ownership of the `data`, might blow your leg
     tensor(pointer data, const shape& dim) noexcept : m_shape(dim)
     {
-        m_tensor.data   = data;
-        m_data_type     = data_type::buffer;
-        m_bytesize      = get_bytesize(m_shape.total());
+        m_tensor                    = data;
+        m_data_type                 = data_type::buffer;
+        m_bytesize                  = get_bytesize(m_shape.total());
     }
 
     tensor& operator=(const tensor& t) noexcept;
@@ -139,25 +146,27 @@ public:
 
     // fill the tensor with given predicate
     void fill(std::function<number_t()> f) noexcept {
-        std::generate_n(m_tensor.data, m_shape.total(), f);
+        std::generate_n(std::get<pointer>(m_tensor), m_shape.total(), f);
     }
 
     // fill the tensor with given value
     void fill(number_t val) noexcept {
-        std::fill_n(m_tensor.data, m_shape.total(), val);
+        std::fill_n(std::get<pointer>(m_tensor), m_shape.total(), val);
     }
 
     // Check if the tensor is empty
     bool empty() const noexcept 
     {
         return m_shape.m_dims.empty() || (
-            m_data_type == data_type::buffer ? m_tensor.data == nullptr : m_tensor.cu_ptr == 0
+            m_data_type == data_type::buffer ? 
+                std::get<pointer>(m_tensor) == nullptr : 
+                std::get<cu_pointer>(m_tensor) == 0
         ); 
     }
 
     // Get the internal 1d buffer
-    pointer data() noexcept { return m_tensor.data; }
-    const_pointer data() const noexcept { return m_tensor.data; }
+    pointer& data() noexcept { return std::get<pointer>(m_tensor); }
+    const_pointer data() const noexcept { return std::get<pointer>(m_tensor); }
 
     // Release the buffer, should be wrapped in a unique pointer with array type
     pointer release() noexcept { return M_release_t<pointer>(); }
@@ -170,16 +179,17 @@ private:
     // Private constructor for optimized cuda buffer management
     tensor(cu_pointer cu_ptr, shape dim) noexcept : m_shape(dim) 
     {
-        m_tensor.cu_ptr = cu_ptr;
-        m_data_type     = data_type::cuda;
-        m_bytesize      = get_bytesize(m_shape.total());
+        std::get<cu_pointer>(m_tensor)  = cu_ptr;
+        m_data_type                     = data_type::cuda;
+        m_bytesize                      = get_bytesize(m_shape.total());
     }
 
     cu_pointer cu_release() noexcept { return M_release_t<cu_pointer>(); }
-    cu_pointer cu_data() const noexcept { return m_tensor.cu_ptr; }
+    cu_pointer cu_data() const noexcept { return std::get<cu_pointer>(m_tensor); }
+    cu_pointer_ref cu_data() noexcept { return std::get<cu_pointer>(m_tensor); }
 
     shape m_shape{};
-    internal_data m_tensor{0};
+    internal_data m_tensor{};
     data_type m_data_type{data_type::buffer};
     size_t m_bytesize{};
     bool m_shared{false};
@@ -205,9 +215,13 @@ private:
         if (m_shared)
             return;
     
-        if (m_data_type == data_type::buffer && m_tensor.data != nullptr) {
-            aligned_free(m_tensor.data);
-            m_tensor.data = nullptr;
+        if (
+            m_data_type == data_type::buffer 
+            && std::holds_alternative<pointer>(m_tensor) 
+            && data() != nullptr) 
+        {
+            aligned_free(data());
+            data() = nullptr;
             inc_alloc(-1);
         }
     }
@@ -218,22 +232,13 @@ private:
         size_t index = 0, size_t offset = 0
     ) noexcept;
 
-
     // Get the internal buffer, either as a `pointer` or `cu_pointer`
-    template <typename T>
-    inline std::enable_if_t<std::is_same_v<T, pointer> || std::is_same_v<T, cu_pointer>, T>
-    M_release_t() noexcept
+    template <IsPointerOrCU T>
+    inline T M_release_t() noexcept
     {
-        T res;
-        if constexpr (std::is_same_v<T, pointer>) { 
-            res = m_tensor.data; 
-            m_tensor.data = nullptr; 
-        }
-        else { 
-            res = m_tensor.cu_ptr; 
-            m_tensor.cu_ptr = 0; 
-        }
-        m_bytesize = 0;
+        T res       = std::get<T>(m_tensor);
+        m_tensor    = {};
+        m_bytesize  = 0;
         m_shape.clear();
         return res;
     }

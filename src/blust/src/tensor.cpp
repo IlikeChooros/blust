@@ -20,15 +20,16 @@ void tensor::M_print_tensor(
     
     // Got 1D representation
     if (rank == 1)
-    {            
+    {
+        auto data = std::get<pointer>(t.m_tensor);
         out << '[';
         for (size_t i = 0; i < end; i++)
         {
             // print with proper formatting
             if (i == end - 1)
-                out << t.m_tensor.data[offset + i];
+                out << data[offset + i];
             else
-                out << t.m_tensor.data[offset + i] << ", ";   
+                out << data[offset + i] << ", ";
         }
     }
     else
@@ -61,14 +62,14 @@ tensor& tensor::operator=(const tensor& t) noexcept
         return *this;
 
     // If that's a cuda pointer, memcpy to this buffer
-    if (t.m_data_type == data_type::cuda && t.m_tensor.cu_ptr != 0) {
+    if (t.m_data_type == data_type::cuda && t.cu_data() != 0) {
         cuMemcpyDtoH(
-            m_tensor.data, t.m_tensor.cu_ptr, 
+            data(), t.cu_data(), 
             count * sizeof(number_t));
     }
     else
     {
-        std::copy_n(t.m_tensor.data, count, m_tensor.data); // will memcpy the buffer
+        std::copy_n(t.data(), count, data()); // will memcpy the buffer
     }
 
     return *this;
@@ -82,19 +83,19 @@ tensor& tensor::operator=(tensor&& t) noexcept
     m_shared    = false; // since I'm getting the ownership of the pointer
 
     // If that's a cuda pointer, copy the buffer
-    if (t.m_data_type == data_type::cuda && t.m_tensor.cu_ptr != 0)
+    if (t.m_data_type == data_type::cuda && std::holds_alternative<cu_pointer>(m_tensor))
     {
         const auto count    = size();
-        m_tensor.data       = aligned_alloc(count);
+        m_tensor            = aligned_alloc(count);
         cuMemcpyDtoH(
-            m_tensor.data, t.m_tensor.cu_ptr, 
+            data(), t.cu_data(), 
             count * sizeof(number_t));
     }
     else
     {
         // Just release the buffer
         M_cleanup_buffer();
-        m_tensor.data = t.release();
+        m_tensor = t.release();
     }
 
     return *this;
@@ -126,7 +127,7 @@ inline size_t tensor::M_alloc_buffer(const tensor& t) noexcept
     m_shape             = t.m_shape;
     m_shared            = false;
     m_data_type         = data_type::buffer; // always use buffer
-    m_tensor.data       = nullptr;
+    m_tensor            = (pointer)nullptr;
     m_bytesize          = 0;
     
     if (count == 0) 
@@ -134,7 +135,7 @@ inline size_t tensor::M_alloc_buffer(const tensor& t) noexcept
 
     inc_alloc(1);
     m_bytesize          = get_bytesize(count);
-    m_tensor.data       = aligned_alloc(count);
+    m_tensor            = aligned_alloc(count);
     return count;
 }
 

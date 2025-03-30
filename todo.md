@@ -9,10 +9,52 @@ instead just check if the previous size is enough, if not, allocate new memory.
 - [ ] Make better backend, with optimizing copy calls on cuda, instead of calculating individual operations, see the chapter
 
 ### New project (for calculations)
-- [ ] Create an ops backend, with python like functions for performing calculations on tensors (right now only on 1D, 2D)
+- [x] Create an ops backend, with python like functions for performing calculations on tensors (right now only on 1D, 2D)
 - [ ] Should use best libraries for matrix operations (cublas, gemm)
 - [ ] Should support target device (either cpu or cuda)
-- [ ] Make the cpu handle tensors with && and & for better performance
+- [x] Make the cpu handle tensors with && and & for better performance (ommited with new ops_tensor class)
+
+Maybe add dispatching operations, and then call 'compute' to run them, so I can leverage the cuda streams and do async operations.
+
+For example:
+
+we want to calculate:
+```
+A, E, I
+
+dA = derivative(A)
+dC = d_cost(A, E)
+P = da % dC
+
+dW += I.T * P
+dB += P
+```
+
+
+```cpp
+operations ops()
+
+tensor A({1, 64}, 2.0);
+tensor E({1, 64}, 1.0);
+tensor I({1, 64}, 5.0);
+tensor W({64, 64}, 0.0);
+tensor B({1, 64}, 0.0);
+tensor dA({1, 64}, 0.0);
+tensor dC({1, 64}, 0.0);
+tensor P({1, 64}, 0.0);
+tensor dW({64, 64}, 0.0);
+tensor dB({1, 64}, 0.0);
+
+ops.prepare(4); // prepare 4 buffers
+ops.dispatch(ops.drelu, A) // gets index 0 result
+ops.dispatch(ops.mean_squared_error, A, E) // gets index 1 result
+ops.dispatch(ops.hadamard, ops.get_result(0), dC) // gets index 2 result
+ops.dispatch(ops.mat_mul, I.T(), P) // gets index 3 result
+ops.dispatch(ops.mat_mul, ops.get_result(3), dW) // gets index 4 result
+ops.dispatch(ops.add, dW, ops.get_result(2)) // gets index 5 result
+ops.dispatch(ops.add, dB, ops.get_result(2)) // gets index 6 result
+
+```
 
 For example:
 

@@ -6,6 +6,7 @@ START_BLUST_NAMESPACE
 
 typedef operations::tensor_t tensor_t;
 typedef tensor_t::pointer pointer;
+typedef operations::tensor_rref_t tensor_rref_t;
 
 typedef union {
     __m128 v;
@@ -374,10 +375,11 @@ inline tensor_t cpu_ops::M_perform_vector_like(
 
         for (int i = 0; i < m_ncores; i++, offset += offset_size) {
             size_t patch_size = i == m_ncores - 1 ? size - offset : offset_size;
-            m_threads.push_back(std::thread(
-                func, a_data + offset, b_data + offset, 
-                res_data + offset, patch_size, n, m
-            ));
+            m_threads.push_back(
+                std::thread(
+                    func, a_data + offset, b_data + offset, 
+                    res_data + offset, patch_size, n, m
+                ));
         }
 
         M_join_threads();
@@ -391,7 +393,7 @@ inline tensor_t cpu_ops::M_perform_vector_like(
 /**
  * @brief Add two tensors and return the result
  */
-tensor_t cpu_ops::add(tensor_t a, tensor_t b) 
+tensor_rref_t cpu_ops::add(tensor_t a, tensor_t b) 
 {
     return M_perform_vector_like(a, b, 1.0, 1.0, M_impl_add);
 }
@@ -399,7 +401,7 @@ tensor_t cpu_ops::add(tensor_t a, tensor_t b)
 /**
  * @brief Perform substaction (a - b) and return the result
  */
-tensor_t cpu_ops::sub(tensor_t a, tensor_t b) 
+tensor_rref_t cpu_ops::sub(tensor_t a, tensor_t b) 
 {
     return M_perform_vector_like(a, b, 1.0, -1.0, M_impl_add);
 }
@@ -407,7 +409,7 @@ tensor_t cpu_ops::sub(tensor_t a, tensor_t b)
 /**
  * @brief Caluculate Ri = Ai * b (see hadamard for element-wise multiplication)
  */
-tensor_t cpu_ops::mul(tensor_t a, number_t b) 
+tensor_rref_t cpu_ops::mul(tensor_t a, number_t b) 
 {
     return M_perform_vector_like(a, a, b, 0.0, M_impl_add); // c = a * b + a * 0
 }
@@ -415,7 +417,7 @@ tensor_t cpu_ops::mul(tensor_t a, number_t b)
 /**
  * @brief Calculate Ri = Ai / b
  */
-tensor_t cpu_ops::div(tensor_t a, number_t b) 
+tensor_rref_t cpu_ops::div(tensor_t a, number_t b) 
 {
     return M_perform_vector_like(a, a, 1 / b, 0.0, M_impl_add);
 }
@@ -423,7 +425,7 @@ tensor_t cpu_ops::div(tensor_t a, number_t b)
 /**
  * @brief Get the hadamard product: Ci = Ai * Bi
  */
-tensor_t cpu_ops::hadamard(tensor_t a, tensor_t b)
+tensor_rref_t cpu_ops::hadamard(tensor_t a, tensor_t b)
 {
     return M_perform_vector_like(a, b, 0, 0, M_impl_hadamard);
 }
@@ -434,7 +436,7 @@ tensor_t cpu_ops::hadamard(tensor_t a, tensor_t b)
  * @param b the second matrix, with dimensions n x k and in a column-major order
  * @return the result matrix, with dimensions m x k and in a column-major order
  */
-tensor_t cpu_ops::mat_mul(tensor_t a, tensor_t b)
+tensor_rref_t cpu_ops::mat_mul(tensor_t a, tensor_t b)
 {
     M_assert_tensor_dim_mat_mul(a, b);
 
@@ -451,7 +453,7 @@ tensor_t cpu_ops::mat_mul(tensor_t a, tensor_t b)
         m_rows, n_cols, k_cols
     );
 
-    return res;
+    return std::move(res);
 }
 
 END_BLUST_NAMESPACE

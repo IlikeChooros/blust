@@ -22,6 +22,9 @@ public:
             m_dims.push_back(d);
     }
 
+    // Create a shape object with given inital dimensions as a vector
+    shape(const dim_t& dims) noexcept : m_dims(dims) {}
+
     // c'tors
     shape() = default;
     shape(const shape& other) noexcept : m_dims(other.m_dims) {}
