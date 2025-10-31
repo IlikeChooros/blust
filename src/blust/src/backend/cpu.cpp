@@ -96,8 +96,6 @@ void cpu_backend::backprop_hidden_dense(
 
 }
 
-
-
 // Add the matrices (Cij = Aij + Bij)
 void cpu_backend::vector_add(number_t* res, number_t* mat1, number_t* mat2, size_t N)
 {
@@ -141,17 +139,20 @@ void cpu_backend::mat_transpose(number_t* res, number_t* mat, size_t rows, size_
 // Typical matrix multiplication
 void cpu_backend::mat_mul(number_t* res, number_t* mat1, number_t* mat2, size_t rows1, size_t cols2, size_t rows2)
 {
-	for (size_t r1 = 0; r1 < rows1; r1++) 
-	{
-		for (size_t k = 0; k < cols2; ++k)
-		{
-			number_t sum = 0;
-			for (size_t c1 = 0; c1 < rows2; c1++)
-				sum += mat1[r1 * rows2 + c1] * mat2[c1 * cols2 + k]; 
+	cpu_ops::M_impl_matumul<cpu_ops::matmul_type::avx2>(
+		mat1, rows2, mat2, cols2, res, cols2, rows1, cols2, rows2
+	);
+	// for (size_t r1 = 0; r1 < rows1; r1++) 
+	// {
+	// 	for (size_t k = 0; k < cols2; ++k)
+	// 	{
+	// 		number_t sum = 0;
+	// 		for (size_t c1 = 0; c1 < rows2; c1++)
+	// 			sum += mat1[r1 * rows2 + c1] * mat2[c1 * cols2 + k]; 
 
-			res[r1 * cols2 + k] = sum;
-		}
-	}
+	// 		res[r1 * cols2 + k] = sum;
+	// 	}
+	// }
 }
 
 END_BLUST_NAMESPACE

@@ -62,7 +62,7 @@ tensor& tensor::operator=(const tensor& t) noexcept
         return *this;
 
     // If that's a cuda pointer, memcpy to this buffer
-    if (t.m_data_type == data_type::cuda && t.cu_data() != 0) {
+    if (t.m_data_type == pointer_type::cuda && t.cu_data() != 0) {
         cuMemcpyDtoH(
             data(), t.cu_data(), 
             count * sizeof(number_t));
@@ -79,11 +79,11 @@ tensor& tensor::operator=(tensor&& t) noexcept
 {
     m_bytesize  = t.m_bytesize;
     m_shape     = std::forward<shape>(t.m_shape);
-    m_data_type = data_type::buffer;
+    m_data_type = pointer_type::buffer;
     m_shared    = false; // since I'm getting the ownership of the pointer
 
     // If that's a cuda pointer, copy the buffer
-    if (t.m_data_type == data_type::cuda && std::holds_alternative<cu_pointer>(m_tensor))
+    if (t.m_data_type == pointer_type::cuda && std::holds_alternative<cu_pointer>(m_tensor))
     {
         const auto count    = size();
         m_tensor            = aligned_alloc(count);
@@ -106,7 +106,7 @@ std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept
     out << "<tensor: dtype=" << utils::TypeName<number_t>() << " " << t.m_shape << ">\n";
 
     // print the buffer
-    if (t.m_data_type == tensor::data_type::buffer)
+    if (t.m_data_type == tensor::pointer_type::buffer)
     {
         auto rank = t.rank();
         if (rank >= 1)
@@ -126,7 +126,7 @@ inline size_t tensor::M_alloc_buffer(const tensor& t) noexcept
     const auto count    = t.size();
     m_shape             = t.m_shape;
     m_shared            = false;
-    m_data_type         = data_type::buffer; // always use buffer
+    m_data_type         = pointer_type::buffer; // always use buffer
     m_tensor            = (pointer)nullptr;
     m_bytesize          = 0;
     

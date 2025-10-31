@@ -19,7 +19,7 @@ concept IsPointerOrCU = std::is_same_v<T, number_t*> || std::is_same_v<T, CUdevi
 
 
 // Main tensor class, can either hold heap memory buffer, or gpu memory pointer
-// The buffer is 16-byte aligned
+// The buffer is 32-byte aligned
 class tensor 
 {
 public:
@@ -30,10 +30,10 @@ public:
     typedef CUdeviceptr cu_pointer;
     typedef CUdeviceptr& cu_pointer_ref;
     typedef number_t* pointer;
-    typedef const pointer const_pointer;
+    typedef const number_t* const_pointer;
 
     typedef std::variant<cu_pointer, pointer> internal_data; 
-    enum class data_type { buffer = 1, cuda = 2 };
+    enum class pointer_type { buffer = 1, cuda = 2 };
 
     static int n_allocs;
     static int max_allocs;
@@ -48,10 +48,10 @@ public:
     /**
      * @brief Get total size in bytes, with given alignment
      */
-    template <size_t Alignment>
+    template <size_t Alignment, typename dtype>
     static constexpr size_t get_bytesize(size_t count) noexcept
     {
-        return ((count * sizeof(number_t) + Alignment - 1) / Alignment ) * Alignment;
+        return ((count * sizeof(dtype) + Alignment - 1) / Alignment ) * Alignment;
     }
 
     /**
@@ -59,7 +59,7 @@ public:
      */
     static constexpr size_t get_bytesize(size_t count) noexcept
     {
-        return get_bytesize<alignment>(count);
+        return get_bytesize<alignment, number_t>(count);
     }
 
     /**
@@ -99,7 +99,7 @@ public:
         inc_alloc(1);
         auto count      = dim.total();
         m_bytesize      = get_bytesize(count);
-        m_data_type     = data_type::buffer;
+        m_data_type     = pointer_type::buffer;
         m_tensor        = aligned_alloc(count);
 
         if (init != 0.0)
@@ -116,8 +116,20 @@ public:
     tensor(pointer data, const shape& dim) noexcept : m_shape(dim)
     {
         m_tensor                    = data;
-        m_data_type                 = data_type::buffer;
+        m_data_type                 = pointer_type::buffer;
         m_bytesize                  = get_bytesize(m_shape.total());
+    }
+
+    // Copy dim.total() elements from the given data to the internal buffer
+    tensor(const_pointer data, const shape& dim) noexcept : m_shape(dim)
+    {
+        // copy the data to the internal buffer
+        inc_alloc(1);
+        auto count                  = m_shape.total();
+        m_bytesize                  = get_bytesize(m_shape.total());
+        m_tensor                    = aligned_alloc(m_bytesize);
+        std::copy_n(data, m_shape.total(), std::get<pointer>(m_tensor));
+        m_data_type                 = pointer_type::buffer;
     }
 
     tensor& operator=(const tensor& t) noexcept;
@@ -139,10 +151,10 @@ public:
     size_t bytesize() const noexcept { return m_bytesize; }
 
     // Get buffer type
-    data_type type() const noexcept { return m_data_type; }
+    pointer_type type() const noexcept { return m_data_type; }
 
     // Check wheter internal buffer is stored in gpu memory
-    bool is_cuda() const noexcept { return m_data_type == data_type::cuda; }
+    bool is_cuda() const noexcept { return m_data_type == pointer_type::cuda; }
 
     // fill the tensor with given predicate
     void fill(std::function<number_t()> f) noexcept {
@@ -158,7 +170,7 @@ public:
     bool empty() const noexcept 
     {
         return m_shape.m_dims.empty() || (
-            m_data_type == data_type::buffer ? 
+            m_data_type == pointer_type::buffer ? 
                 std::get<pointer>(m_tensor) == nullptr : 
                 std::get<cu_pointer>(m_tensor) == 0
         ); 
@@ -180,7 +192,7 @@ private:
     tensor(cu_pointer cu_ptr, shape dim) noexcept : m_shape(dim) 
     {
         std::get<cu_pointer>(m_tensor)  = cu_ptr;
-        m_data_type                     = data_type::cuda;
+        m_data_type                     = pointer_type::cuda;
         m_bytesize                      = get_bytesize(m_shape.total());
     }
 
@@ -190,7 +202,7 @@ private:
 
     shape m_shape{};
     internal_data m_tensor{};
-    data_type m_data_type{data_type::buffer};
+    pointer_type m_data_type{pointer_type::buffer};
     size_t m_bytesize{};
     bool m_shared{false};
 
@@ -216,7 +228,7 @@ private:
             return;
     
         if (
-            m_data_type == data_type::buffer 
+            m_data_type == pointer_type::buffer 
             && std::holds_alternative<pointer>(m_tensor) 
             && data() != nullptr) 
         {

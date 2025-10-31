@@ -51,7 +51,7 @@ public:
 	}
 
 	// Prepare the model for learning
-	void compile(Optimizer* optimizer, error_funcs loss = mean_squared_error) override
+	void compile(Optimizer* optimizer = new SGD(), error_funcs loss = mean_squared_error) override
 	{
 		m_input_layer = m_layers.front().get();
 		m_output_layer = m_layers.back().get();

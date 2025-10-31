@@ -2,15 +2,11 @@
 #include <chrono>
 #include <iostream>
 
+constexpr long long n = 4e2, m = 8e2, k = 4e2;
+
 using namespace blust;
 
-void test_result(tensor& a, tensor& b, tensor& c) {
-
-	auto a_data = a.data();
-	auto b_data = b.data();
-	auto c_data = c.data();
-	auto size = a.size();
-
+void test_result(number_t* a_data, number_t* b_data, number_t* c_data, size_t size) {
 	for (size_t i = 0; i < size; i++) {
 		if (fabs(c_data[i] - (a_data[i] + b_data[i])) > 1e-2 ) {
 			std::cout << i << ": " << a_data[i] << " + " << b_data[i] << " != " << c_data[i] << std::endl;
@@ -23,15 +19,10 @@ void test_result(tensor& a, tensor& b, tensor& c) {
 
 constexpr auto MAX_PRINT_DIM = 20;
 
-void test_mat_mul(tensor& a, tensor& b, tensor& c)
+void test_mat_mul(number_t* a_data, number_t* b_data, number_t* c_data, size_t n, size_t m, size_t k)
 {
-	tensor r{{(int)a.dim()[0], (int)b.dim()[1]}};
-	auto a_data = a.data();
-	auto b_data = b.data();
-	auto c_data = c.data();
+	tensor r{{(int)n, (int)k}};
 	auto r_data = r.data();
-
-	size_t n = a.dim()[0], m = a.dim()[1], k = b.dim()[1];
 	
 	for (size_t i = 0; i < n; i++)
 	{
@@ -63,23 +54,18 @@ void test_mat_mul(tensor& a, tensor& b, tensor& c)
 	std::cout << "test passed!\n";
 }
 
-int main(int argc, char** argv)
-{
-    init(argc, argv, "");
-
-	// int n = 1 * 1e1, m = 1 * 1e1;
-	constexpr long long n = 8e3, m = 8e2, k = 4e0;
+void tensor_mul_test() {
 	size_t bytes_size;
 
 	tensor t({n, m}, 2);
-	tensor t1({m, n}, 2);
-	tensor t2({m, n}, 2);
+	tensor t1({n, m}, 2);
+	tensor t2({m, k}, 2);
 
 	bytes_size = t1.bytesize() + t2.bytesize();
 
 	using namespace std::chrono;
 
-	double gflops = 2 * n * m;
+	double gflops = n * m * k;
 	double seconds;
 	
 	tensor r;
@@ -107,15 +93,10 @@ int main(int argc, char** argv)
 	auto start = high_resolution_clock::now();
 	constexpr size_t n_iter = 25;
 	for (i = 0; i < n_iter; i++)
-		r = ops->add(t1, t2);
+		r = ops->mat_mul(t1, t2);
 
-	ops->add(t1, t2);
-	
-	r = ops->add(ops->mat_mul(t1, t2), t);
-
-	// M1 * M2  + M3 - M4 
-
-	// R1 + (M3 - M4)
+	// ops->add(t1, t2);
+	// r = ops->add(ops->mat_mul(t1, t2), t);
 
 	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / 25;
 	gflops  = gflops / (seconds) / 1e9;
@@ -132,35 +113,23 @@ int main(int argc, char** argv)
 	
 	std::cout << "Testing result...\n";
 
-	test_result(t1, t2, r);
+	// test_result(t1.data(), t2.data(), r.data(), r.size());
+	test_mat_mul(t1.data(), t2.data(), r.data(), n,m,k);
 	// test_mat_mul(t1, t2, r);
 
 	std::cout << "Press enter...\n";
 	
-	std::string ent;
-	std::cin >> ent;
-
-	return 0;
+	getchar();
 }
-	/*Sequential seq;
-	({
-		new Input({1, 768}),
-		new Dense(2048, relu),
-		new Dense(512, relu),
-		new Dense(128, relu),
-		new Dense(512, relu),
-		new Dense(64, relu),
-		new Dense(2, softmax)
-		});
+
+void modelTest() {
+	Sequential seq;	
 	seq.add(Input({ 1, 768 }));
-	seq.add(Dense(2048, relu));
-	seq.add(Dense(512, relu));
-	seq.add(Dense(128, relu));
 	seq.add(Dense(512, relu));
 	seq.add(Dense(64, relu));
 	seq.add(Dense(2, softmax));
 
-	seq.compile(0.1);
+	seq.compile();
 
 	matrix_t inputs({ 1, 768 }, 0.5f);
 	utils::randomize(inputs.begin(), inputs.end(), inputs.size());
@@ -175,7 +144,7 @@ int main(int argc, char** argv)
 	auto end = std::chrono::high_resolution_clock::now();
 
 	std::chrono::duration<double, std::milli> duration = end - start;
-	printf("avg time: %f ms\n", duration.count() / 10.0f);*/
+	printf("avg time: %f ms\n", duration.count() / 10.0f);
 
 	/*Input input = Input({1, 768});
     Dense hidden    = Dense(2048, relu)(input);
@@ -204,6 +173,84 @@ int main(int argc, char** argv)
 	auto end = std::chrono::high_resolution_clock::now();
 
 	std::chrono::duration<double, std::milli> duration = end - start;
-	printf("avg time: %f ms\n", duration.count() / 10.0f);
+	printf("avg time: %f ms\n", duration.count() / 10.0f);*/
+}
 
-    return 0;*/
+void matrix_mul_test() {
+	size_t bytes_size;
+
+	matrix_t m1({n, m});
+	matrix_t m2({n, m});
+	matrix_t m3({m, k});
+
+	bytes_size = m1.bytesize() + m2.bytesize();
+
+	using namespace std::chrono;
+
+	double gflops = n * m * k;
+	double seconds;
+	
+	matrix_t r;
+	number_t i = 1;
+
+	if (n < MAX_PRINT_DIM && m < MAX_PRINT_DIM && k < MAX_PRINT_DIM)
+	{
+		m1.fill([&i](){ return i++; });
+		m2.fill([&i](){ return i++; });
+		std::cout << m1 << std::endl;
+		std::cout << m2 << std::endl;
+	}
+	else
+	{
+		std::random_device rd{};
+		std::mt19937 gen{rd()};
+		std::uniform_real_distribution<number_t> dist{0, 1};
+		m1.fill([&dist, &gen](){ return dist(gen); });
+		m2.fill([&dist, &gen](){ return dist(gen); });
+	}
+
+	std::cout << "Size: " << bytes_size / 1e6 << "MB\n";
+	std::cout << "Starting...\n";
+
+	auto start = high_resolution_clock::now();
+	constexpr size_t n_iter = 25;
+	for (i = 0; i < n_iter; i++)
+		// r = ops->add(t1, t2);
+		r = m1 + m2;
+
+	// ops->add(t1, t2);
+	// r = ops->add(ops->mat_mul(t1, t2), t);
+
+	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / 25;
+	gflops  = gflops / (seconds) / 1e9;
+
+	if (n < MAX_PRINT_DIM && m < MAX_PRINT_DIM && k < MAX_PRINT_DIM)
+		std::cout << r << '\n';
+
+	std::cout 
+		<< "time=" << seconds
+			<< "s gflops="<< gflops 
+			<< " n_allocs=" << tensor::n_allocs 
+			<< " max_allocs=" << tensor::max_allocs
+			<< "\n";
+	
+	std::cout << "Testing result...\n";
+
+	// test_result(m1.data(), m2.data(), r.data(), r.size());
+	test_mat_mul(m1.data(), m2.data(), r.data(), n,m,k);
+	// test_mat_mul(t1, t2, r);
+
+	std::cout << "Press enter...\n";
+	
+	getchar();
+}
+
+int main(int argc, char** argv)
+{
+    init(argc, argv, "cpu");
+
+	printf("Matrix:\n");
+	matrix_mul_test();
+	printf("Tensor:\n");
+	tensor_mul_test();
+}

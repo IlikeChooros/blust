@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base_backend.hpp"
+#include "cpu_ops.hpp"
 
 #include <cstring>
 

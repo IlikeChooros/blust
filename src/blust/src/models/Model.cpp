@@ -135,7 +135,7 @@ void Model::train_on_batch(batch_t& inputs, batch_t& expected)
     // Apply the gradients
 	apply_gradients(m_steps, inputs.size());
 	m_loss_value /= inputs.size();
-    //std::cout << "cost=" << dynamic_cast<BaseLearningLayer*>(m_output_layer)->cost(expected[expected.size() - 1], m_error_func) << '\n';
+    std::cout << "cost=" << dynamic_cast<BaseLearningLayer*>(m_output_layer)->cost(expected[expected.size() - 1], m_error_func) << '\n';
 }
 
 END_BLUST_NAMESPACE

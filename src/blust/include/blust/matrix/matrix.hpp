@@ -22,6 +22,8 @@ public:
     typedef dtype* pointer_t;
     typedef const dtype* const_pointer_t;
 
+    static constexpr size_t aligment = 32;
+
 	// Get a matrix of zeros
 	static matrix<dtype> zeros(shape2D shape) {
 		return matrix<dtype>(shape, 0);
@@ -63,16 +65,20 @@ public:
     // Create matrix from a flat vector
     matrix(shape2D shape, std::vector<dtype>& v)
     {
-        m_rows   = shape.x;
-        m_cols   = shape.y;
-        m_matrix = std::move(v);
+        if (shape.x*shape.y != v.size() && !v.empty()) {
+            return;
+        }
+
+        build(shape);
+        auto it = this->begin();
+        std::copy_n(v.begin(), v.size(), it);
     }
 
     constexpr matrix& operator=(matrix&& other) noexcept
     {
         m_rows   = other.m_rows; 
         m_cols   = other.m_cols;
-        m_matrix = std::move(other.m_matrix);
+        m_data.reset(other.m_data.release());
         return *this;
     }
 
@@ -87,9 +93,10 @@ public:
     template <typename T>
     matrix& operator=(const matrix<T>& other)
     {
-        m_rows   = other.m_rows;
-        m_cols   = other.m_cols;
-        m_matrix = other.m_matrix;
+        M_alloc_buffer({other.m_rows, other.m_cols});        
+        if (other.m_data.get() != nullptr) {
+            std::copy_n(other.begin(), other.size(), begin());
+        }
         return *this;
     }
 
@@ -104,7 +111,10 @@ public:
     }
 
     // Get the total size of the buffer
-    inline size_t size() const noexcept { return m_matrix.size(); }
+    inline size_t size() const noexcept { return m_rows*m_cols; }
+
+    // Total bytes used by buffer
+    inline size_t bytesize() const noexcept { return M_get_buffer_size(); }
 
     // Get number of rows in a matrix
     inline size_t rows() const noexcept { return m_rows; }
@@ -116,13 +126,18 @@ public:
     inline shape2D dim() const noexcept { return {rows(), cols()}; }
 
     // Get the raw pointer
-    inline const_pointer_t data() const { return m_matrix.data(); }
-    inline pointer_t data() { return m_matrix.data(); }
+    inline const_pointer_t data() const { return m_data.get(); }
+    inline pointer_t data() { return m_data.get(); }
 
-    inline auto begin() { return m_matrix.begin(); }
-    inline auto begin() const { return m_matrix.begin(); }
-    inline auto end() { return m_matrix.end(); }
-    inline auto end() const { return m_matrix.end(); }
+    inline auto begin() { return m_data.get(); }
+    inline auto begin() const { return m_data.get(); }
+    inline auto end() { return m_data.get() + size(); }
+    inline auto end() const { return m_data.get() + size(); }
+
+    // fill the tensor with given predicate
+    void fill(std::function<dtype()> f) noexcept {
+        std::generate_n(m_data.get(), size(), f);
+    }
 
 	// Fill the matrix with given value
 	inline void fill(dtype val) { 
@@ -138,19 +153,19 @@ public:
     }
 
     // Get the value at (row, column)
-    dtype& operator()(size_t r, size_t c) { return m_matrix[r * m_cols + c]; }
-    const dtype& operator()(size_t r, size_t c) const { return m_matrix[r * m_cols + c]; }
+    dtype& operator()(size_t r, size_t c) { return *(m_data.get()+(r * m_cols + c)); }
+    const dtype& operator()(size_t r, size_t c) const { return *(m_data.get()+(r * m_cols + c)); }
 
     // Get value at index i, (assumes index is correct)
-    dtype& operator()(size_t i) { return m_matrix[i]; }
-    const dtype& operator()(size_t i) const { return m_matrix[i]; }
+    dtype& operator()(size_t i) { return *(m_data.get()+i); }
+    const dtype& operator()(size_t i) const { return *(m_data.get()+i); }
 
     // Get the whole row as vector
     std::vector<dtype> operator[](size_t r) const
     { 
         return std::vector<dtype>(
-            m_matrix.begin() + (r * m_cols), 
-            m_matrix.begin() + ((r + 1) * m_cols)); 
+            m_data.get() + (r * m_cols), 
+            m_data.get() + ((r + 1) * m_cols)); 
     }
 
     // Compare the matrices
@@ -364,16 +379,22 @@ public:
 
 private:
 
-    std::vector<dtype> m_matrix;
+    std::unique_ptr<number_t> m_data;
+    // std::vector<dtype> m_matrix;
     size_t m_rows;
     size_t m_cols;
+
+    size_t M_get_buffer_size() const {
+        return tensor::get_bytesize<aligment,dtype>(m_rows*m_cols);
+    }
 
     // Set the internal size and reallocate the buffer
     void M_alloc_buffer(shape2D shape, dtype init = 0)
     {
         m_rows = shape.x;
         m_cols = shape.y;
-        m_matrix.resize(m_cols * m_rows, init);
+        // m_matrix.resize(m_cols * m_rows, init);
+        m_data.reset(static_cast<dtype*>(std::aligned_alloc(aligment, M_get_buffer_size())));
     }
 
     // Assert m1 and m2 are equally shaped
@@ -383,6 +404,7 @@ private:
             throw InvalidMatrixSize({m2.rows(), m2.cols()}, {m1.rows(), m1.cols()});
     }
 
+    
     // Assert m1 and m2 can be multiplied (m1.cols == m2.rows)
     static void M_assert_dim_mul(matrix<dtype>& m1, matrix<dtype>& m2)
     {

@@ -59,7 +59,7 @@ public:
     shape2D dim() { return m_output_shape; }
 
     // Set training mode, affects the traning, (for example the wheter to use dropout)
-    void set_traning_mode(bool training = true) { m_inputs_size = training; }
+    void set_traning_mode(bool training = true) {}
 
     // Attach the input layer
     void attach(BaseLayer* prev) 

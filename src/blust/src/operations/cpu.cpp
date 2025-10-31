@@ -38,58 +38,58 @@ void cpu_ops::M_impl_add(
     number_t n, number_t m
 ) noexcept
 {
-    // assume_aligned(a_data);
-    // assume_aligned(b_data);
-    // assume_aligned(c_data);
+    assume_aligned(a_data);
+    assume_aligned(b_data);
+    assume_aligned(c_data);
 
     // with -03 and -mavx2 this is faster
-    // while (size--) {
-    //     (*c_data++) = (*a_data++) * n + (*b_data++) * m;
-    // }
-
-    size_t i = 0;
-    if (size >= 4 * 8)
-    {
-        // SIMD version with 4 avx2 vectors
-        vec8f_t va0, va1, va2, va3,
-                vb0, vb1, vb2, vb3,
-                vc0, vc1, vc2, vc3,
-                vn, vm;
-
-        vn.v = _mm256_set1_ps(n);
-        vm.v = _mm256_set1_ps(m);
-
-        for (; i < size; i += 4 * 8)
-        {
-            if (size - i < 4 * 8)
-                break;
-
-            va0.v = _mm256_load_ps(a_data + i);
-            va1.v = _mm256_load_ps(a_data + i + 8);
-            va2.v = _mm256_load_ps(a_data + i + 16);
-            va3.v = _mm256_load_ps(a_data + i + 24);
-
-            vb0.v = _mm256_load_ps(b_data + i);
-            vb1.v = _mm256_load_ps(b_data + i + 8);
-            vb2.v = _mm256_load_ps(b_data + i + 16);
-            vb3.v = _mm256_load_ps(b_data + i + 24);
-
-            vc0.v = _mm256_add_ps(_mm256_mul_ps(va0.v, vn.v), _mm256_mul_ps(vb0.v, vm.v));
-            vc1.v = _mm256_add_ps(_mm256_mul_ps(va1.v, vn.v), _mm256_mul_ps(vb1.v, vm.v));
-            vc2.v = _mm256_add_ps(_mm256_mul_ps(va2.v, vn.v), _mm256_mul_ps(vb2.v, vm.v));
-            vc3.v = _mm256_add_ps(_mm256_mul_ps(va3.v, vn.v), _mm256_mul_ps(vb3.v, vm.v));
-
-            _mm256_store_ps(c_data + i, vc0.v);
-            _mm256_store_ps(c_data + i + 8, vc1.v);
-            _mm256_store_ps(c_data + i + 16, vc2.v);
-            _mm256_store_ps(c_data + i + 24, vc3.v);
-        }
+    while (size--) {
+        (*c_data++) = (*a_data++) * n + (*b_data++) * m;
     }
 
-    // Add the rest of the elements
-    for(; i < size; i++) {
-        (*c_data++) += (*a_data++) * n + (*b_data++) * m;
-    }    
+    // size_t i = 0;
+    // if (size >= 4 * 8)
+    // {
+    //     // SIMD version with 4 avx2 vectors
+    //     vec8f_t va0, va1, va2, va3,
+    //             vb0, vb1, vb2, vb3,
+    //             vc0, vc1, vc2, vc3,
+    //             vn, vm;
+
+    //     vn.v = _mm256_set1_ps(n);
+    //     vm.v = _mm256_set1_ps(m);
+
+    //     for (; i < size; i += 4 * 8)
+    //     {
+    //         if (size - i < 4 * 8)
+    //             break;
+
+    //         va0.v = _mm256_load_ps(a_data + i);
+    //         va1.v = _mm256_load_ps(a_data + i + 8);
+    //         va2.v = _mm256_load_ps(a_data + i + 16);
+    //         va3.v = _mm256_load_ps(a_data + i + 24);
+
+    //         vb0.v = _mm256_load_ps(b_data + i);
+    //         vb1.v = _mm256_load_ps(b_data + i + 8);
+    //         vb2.v = _mm256_load_ps(b_data + i + 16);
+    //         vb3.v = _mm256_load_ps(b_data + i + 24);
+
+    //         vc0.v = _mm256_add_ps(_mm256_mul_ps(va0.v, vn.v), _mm256_mul_ps(vb0.v, vm.v));
+    //         vc1.v = _mm256_add_ps(_mm256_mul_ps(va1.v, vn.v), _mm256_mul_ps(vb1.v, vm.v));
+    //         vc2.v = _mm256_add_ps(_mm256_mul_ps(va2.v, vn.v), _mm256_mul_ps(vb2.v, vm.v));
+    //         vc3.v = _mm256_add_ps(_mm256_mul_ps(va3.v, vn.v), _mm256_mul_ps(vb3.v, vm.v));
+
+    //         _mm256_store_ps(c_data + i, vc0.v);
+    //         _mm256_store_ps(c_data + i + 8, vc1.v);
+    //         _mm256_store_ps(c_data + i + 16, vc2.v);
+    //         _mm256_store_ps(c_data + i + 24, vc3.v);
+    //     }
+    // }
+
+    // // Add the rest of the elements
+    // for(; i < size; i++) {
+    //     (*c_data++) += (*a_data++) * n + (*b_data++) * m;
+    // }    
 }
 
 /**
@@ -243,8 +243,8 @@ void cpu_ops::M_inner_kernel(
             if (cols + kernel_size > k) 
                 break;
 
-            // Calculate the dot product of the ith row of A
-            // and the jth column of B
+            // Calculate the dot product of a row of A
+            // and a column of B
             kernel(
                 M(a, lda, rows, 0),
                 M(b, ldb, 0, cols),
@@ -360,6 +360,8 @@ inline tensor_t cpu_ops::M_perform_vector_like(
     func_vector_t func
 )
 {
+    BLUST_ASSERT(a.dim()==b.dim());
+
     auto res = M_get_res_tensor(a, b);
     // calculate the result
 

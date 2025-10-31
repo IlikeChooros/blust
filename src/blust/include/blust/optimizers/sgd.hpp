@@ -43,7 +43,7 @@ private:
 
 	// Update the weights without momentum
 	static void M_update(
-		matrix_t& _, matrix_t& grad, matrix_t& w, number_t learning_rate, number_t __
+		matrix_t& /*velocity*/, matrix_t& grad, matrix_t& w, number_t learning_rate, number_t /*momentum*/
 	)
 	{
 		w -= learning_rate * grad;
