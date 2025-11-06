@@ -3,6 +3,7 @@
 #include <blust/types.hpp>
 #include <blust/functions.hpp>
 #include <blust/optimizers/optimizer.hpp>
+#include <blust/backend/operations.hpp>
 
 START_BLUST_NAMESPACE
 
@@ -20,10 +21,10 @@ protected:
     bool   m_in_training        = false;
     size_t m_inputs_size        = 0;
     size_t m_output_size        = 0;
-    shape2D m_output_shape      = {};
+    shape m_output_shape      = {};
     BaseLayer* m_next           = nullptr;
     BaseLayer* m_prev           = nullptr;
-    matrix_t m_activations      = {};
+    tensor_t m_activations      = {};
 public:
     friend class Model;
     friend class Sequential;
@@ -56,7 +57,7 @@ public:
     virtual ~BaseLayer() = default;
 
     // Get the shape of the output matrix
-    shape2D dim() { return m_output_shape; }
+    shape dim() { return m_output_shape; }
 
     // Set training mode, affects the traning, (for example the wheter to use dropout)
     void set_traning_mode(bool training = true) {}
@@ -77,13 +78,13 @@ public:
     bool first() { return m_prev == nullptr; }
 
     // Calculate layer activations
-    virtual matrix_t& feed_forward(matrix_t& inputs) = 0;
+    virtual tensor_t& feed_forward(tensor_t& inputs) = 0;
 
     // Feed forward the inputs
-    matrix_t& operator()(matrix_t& inputs) { return feed_forward(inputs); }
+    tensor_t& operator()(tensor_t& inputs) { return feed_forward(inputs); }
 
     // Get the activations of the layer
-    matrix_t& get_activations() { return m_activations; }
+    tensor_t& get_activations() { return m_activations; }
 };
 
 
@@ -99,9 +100,9 @@ public:
     BaseLearningLayer(BaseLearningLayer&& other) : BaseLayer(std::forward<BaseLayer>(other)) {}
 
     virtual void apply(number_t learning_rate = 0.2, size_t batch_size = 1) = 0;
-    virtual void gradient(matrix_t& inputs, matrix_t& expected, error_functor_t& func) = 0;
-    virtual void gradient(matrix_t& inputs) = 0;
-    virtual number_t cost(matrix_t& expected, error_functor_t& error) = 0;
+    virtual void gradient(tensor_t& inputs, tensor_t& expected, error_functor_t& func) = 0;
+    virtual void gradient(tensor_t& inputs) = 0;
+    virtual number_t cost(tensor_t& expected, error_functor_t& error) = 0;
 
 	// Set the optimizer for the layer
     virtual void set_optimizer(Optimizer* optimizer)
@@ -126,20 +127,20 @@ public:
     BaseWeightedLayer(BaseWeightedLayer&& other) : BaseLearningLayer(std::forward<BaseLearningLayer>(other)) {}
 
     virtual void randomize(uint64_t seed = 0x27) = 0;
-    virtual matrix_t& get_weights() = 0;
-    virtual matrix_t& get_partial_deriv() = 0;
-    virtual matrix_t& get_weighted_input() = 0;
-    virtual matrix_t& get_gradient_w() = 0;
+    virtual tensor_t& get_weights() = 0;
+    virtual tensor_t& get_partial_deriv() = 0;
+    virtual tensor_t& get_weighted_input() = 0;
+    virtual tensor_t& get_gradient_w() = 0;
 };
 
 // Fully connected layer, with weights and biases
 class WeightedLayer : public BaseWeightedLayer
 {
 protected:
-    matrix_t m_weights;
-    matrix_t m_d_weights;
-    matrix_t m_weighted_input;
-    matrix_t m_partial_deriv;
+    tensor_t m_weights;
+    tensor_t m_d_weights;
+    tensor_t m_weighted_input;
+    tensor_t m_partial_deriv;
 public:
 
     friend class Dense;
@@ -161,10 +162,10 @@ public:
         m_partial_deriv     = std::move(other.m_partial_deriv);
     }
 
-    matrix_t& get_weights() override { return m_weights; }
-    matrix_t& get_partial_deriv() override { return m_partial_deriv; }
-    matrix_t& get_weighted_input() override { return m_weighted_input; }
-    matrix_t& get_gradient_w() override { return m_d_weights; }
+    tensor_t& get_weights() override { return m_weights; }
+    tensor_t& get_partial_deriv() override { return m_partial_deriv; }
+    tensor_t& get_weighted_input() override { return m_weighted_input; }
+    tensor_t& get_gradient_w() override { return m_d_weights; }
 };
 
 END_BLUST_NAMESPACE

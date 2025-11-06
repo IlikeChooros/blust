@@ -26,9 +26,9 @@ public:
 	virtual ~Optimizer() = default;
 
 	// Create the Optimizer
-	virtual void build(shape2D w_dim, shape2D b_dim) = 0;
-	virtual void update_step(matrix_t& grad_w, matrix_t& grad_b, matrix_t& w, matrix_t& b, number_t learning_rate) = 0;
-	virtual void update_step(matrix_t& grad_w, matrix_t& w, number_t learning_rate) = 0;
+	virtual void build(shape w_dim, shape b_dim) = 0;
+	virtual void update_step(tensor_t& grad_w, tensor_t& grad_b, tensor_t& w, tensor_t& b, number_t learning_rate) = 0;
+	virtual void update_step(tensor_t& grad_w, tensor_t& w, number_t learning_rate) = 0;
 	virtual Optimizer* copy() = 0;
 	std::shared_ptr<BaseDecay>& get_decay() { return m_decay; }
 };

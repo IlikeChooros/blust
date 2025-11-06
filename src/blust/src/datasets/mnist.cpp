@@ -41,7 +41,7 @@ void mnist::M_load_images(batch_t& images, std::filesystem::path path)
 		file.read((char*)image.data(), IMAGE_SIZE);
 
 		// Create the matrix, and normalize the values
-		matrix_t mat_img({ 1, size_t(IMAGE_SIZE) });
+		tensor_t mat_img({ 1, size_t(IMAGE_SIZE) });
 		std::transform(image.begin(), image.end(), mat_img.begin(), [](uint8_t c) { return number_t(c) / 255.0f; });
 		images.push_back(mat_img);
 	}
@@ -80,7 +80,7 @@ void mnist::M_load_labels(batch_t& labels, std::filesystem::path path)
 		file.read(&label, 1);
 
 		// Create the one-hot encoded vector
-		matrix_t mat_label({ 10, 1 }, 0.0);
+		tensor_t mat_label({ 10, 1 }, 0.0);
 		mat_label(label) = 1.0;
 		labels.push_back(mat_label);
 	}

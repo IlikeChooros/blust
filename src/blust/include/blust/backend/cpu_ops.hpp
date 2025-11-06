@@ -74,7 +74,7 @@ class cpu_ops : public operations
     // Calls M_add with these parameters
     inline tensor_t M_perform_vector_like(
         tensor_t& a, tensor_t& b, number_t n, number_t m,
-        func_vector_t func
+        func_vector_t func, bool allocate
     );
 
     static inline tensor_t M_get_res_tensor(tensor_t& a, tensor_t& b);
@@ -98,13 +98,14 @@ class cpu_ops : public operations
 public:
     cpu_ops(int n_threads = 1) : m_ncores(std::max<int>(1, n_threads)) {}
 
-    tensor_rref_t add(tensor_t, tensor_t) override;
-    tensor_rref_t sub(tensor_t, tensor_t) override;
-    tensor_rref_t mul(tensor_t, number_t) override;
-    tensor_rref_t div(tensor_t, number_t) override;
+    tensor_rref_t add(tensor_t, tensor_t, bool allocate = true) override;
+    tensor_rref_t sub(tensor_t, tensor_t, bool allocate = true) override;
+    tensor_rref_t mul(tensor_t, number_t, bool allocate = true) override;
+    tensor_rref_t div(tensor_t, number_t, bool allocate = true) override;
 
-    tensor_rref_t hadamard(tensor_t, tensor_t) override;
+    tensor_rref_t hadamard(tensor_t, tensor_t, bool allocate = true) override;
     tensor_rref_t mat_mul(tensor_t, tensor_t) override;
+    tensor_rref_t transpose(tensor_t) override;
 };
 
 END_BLUST_NAMESPACE

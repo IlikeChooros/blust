@@ -8,7 +8,7 @@ START_BLUST_NAMESPACE
 class Input : public BaseLayer
 {
 public:
-    Input(shape2D shape) { 
+    Input(shape shape) { 
         m_output_shape  = shape; 
         m_output_size   = 0;
         m_inputs_size   = 0;
@@ -27,7 +27,7 @@ public:
     }
 
     // Set the `activations`
-    matrix_t& feed_forward(matrix_t& inputs) override
+    tensor_t& feed_forward(tensor_t& inputs) override
     {
         m_activations = inputs;
         return m_activations;

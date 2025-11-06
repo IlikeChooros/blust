@@ -17,6 +17,9 @@ START_BLUST_NAMESPACE
 template <typename T>
 concept IsPointerOrCU = std::is_same_v<T, number_t*> || std::is_same_v<T, CUdeviceptr>;
 
+template <typename T>
+concept TensorDataType = std::is_same_v<T, float> || std::is_same_v<T, double> || std::is_integral_v<T>;
+
 
 // Main tensor class, can either hold heap memory buffer, or gpu memory pointer
 // The buffer is 32-byte aligned
@@ -137,6 +140,19 @@ public:
 
     virtual ~tensor() noexcept { M_cleanup_buffer(); }
 
+    // Allocate underlying tensor buffer filled with given `init` value
+    void build(const shape& dim, number_t init = 0.0) noexcept 
+    {
+        inc_alloc(1);
+        auto count      = dim.total();
+        m_bytesize      = get_bytesize(count);
+        m_data_type     = pointer_type::buffer;
+        m_tensor        = aligned_alloc(count);
+
+        if (init != 0.0)
+            std::fill_n(std::get<pointer>(m_tensor), count, init);
+    }
+
     // Get the dimensions (as a vector)
     shape::dim_t dim() const noexcept { return m_shape.dim(); }
     const shape& layout() const noexcept { return m_shape; }
@@ -180,11 +196,20 @@ public:
     pointer& data() noexcept { return std::get<pointer>(m_tensor); }
     const_pointer data() const noexcept { return std::get<pointer>(m_tensor); }
 
+    pointer begin() noexcept { return std::get<pointer>(m_tensor); }
+    auto begin() const noexcept { return std::get<pointer>(m_tensor); }
+    pointer end() noexcept { return std::get<pointer>(m_tensor) + size(); }
+    auto end() const noexcept { return std::get<pointer>(m_tensor) + size(); }
+
     // Release the buffer, should be wrapped in a unique pointer with array type
     pointer release() noexcept { return M_release_t<pointer>(); }
     
     // Print the tensor to output stream
     friend std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept;
+
+    // Array like access
+    number_t& operator()(size_t i) { return *(data() + i); }
+    number_t operator()(size_t i) const { return *(data() + i); }
 
 private:
 

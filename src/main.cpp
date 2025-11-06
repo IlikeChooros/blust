@@ -2,7 +2,7 @@
 #include <chrono>
 #include <iostream>
 
-constexpr long long n = 3e2, m = 2e2, k = 5e2;
+constexpr long long n = 512, m = 512, k = 512;
 
 using namespace blust;
 
@@ -19,23 +19,30 @@ void test_result(number_t* a_data, number_t* b_data, number_t* c_data, size_t si
 
 constexpr auto MAX_PRINT_DIM = 20;
 
-void test_mat_mul(number_t* a_data, number_t* b_data, number_t* c_data, size_t n, size_t m, size_t k)
+double test_mat_mul(number_t* a_data, number_t* b_data, number_t* c_data, size_t n, size_t m, size_t k)
 {
-	tensor r{{(int)n, (int)k}};
+	using namespace std::chrono;
+	tensor r{{n, k}};
 	auto r_data = r.data();
 	
-	for (size_t i = 0; i < n; i++)
+	auto start = steady_clock::now();
+
+	// mnk -> nmp
+
+// #pragma omp parallel for
+	for (size_t i = 0; i < m; i++)
 	{
 		for (size_t j = 0; j < k; j++)
 		{
 			number_t sum = 0;
-			for (size_t l = 0; l < m; l++)
+			for (size_t l = 0; l < n; l++)
 			{
 				sum += a_data[i * m + l] * b_data[l * k + j];
 			}
 			r_data[i * k + j] = sum;
 		}
 	}
+	auto total = duration_cast<microseconds>(steady_clock::now() - start).count() / 1e6;
 
 	if (n < MAX_PRINT_DIM && m < MAX_PRINT_DIM && k < MAX_PRINT_DIM)
 		std::cout << r << std::endl;
@@ -47,17 +54,18 @@ void test_mat_mul(number_t* a_data, number_t* b_data, number_t* c_data, size_t n
 			std::cout 
 					<< "(" << i / k << ", " << i % k << ") (test != result) " 
 					<< r_data[i] << " != " << c_data[i] << '\n';
-			return;
+			return total;
 		}
 	}
 
 	std::cout << "test passed!\n";
+
+	return total;
 }
 
 void tensor_mul_test() {
 	size_t bytes_size;
 
-	tensor t({n, m}, 2);
 	tensor t1({n, m}, 2);
 	tensor t2({m, k}, 2);
 
@@ -65,7 +73,10 @@ void tensor_mul_test() {
 
 	using namespace std::chrono;
 
-	double gflops = n * m * k;
+	// for each result Cij = Dot(Aix, Bxj) x from 0 to m
+	// dot has 2 operations: +, * so we get total of n * k * [Dot(Aix, Bxj) x from 0 to m] operations
+	// and that is n * k * (2m) = 2nkm
+	double gflops = 2 * n * m * k;
 	double seconds;
 	
 	tensor r;
@@ -87,6 +98,8 @@ void tensor_mul_test() {
 		t2.fill([&dist, &gen](){ return dist(gen); });
 	}
 
+	std::cout.setf(std::ios::fixed);
+	std::cout.precision(3);
 	std::cout << "Size: " << bytes_size / 1e6 << "MB\n";
 	std::cout << "Starting...\n";
 
@@ -94,11 +107,12 @@ void tensor_mul_test() {
 	constexpr size_t n_iter = 5;
 	for (i = 0; i < n_iter; i++)
 		r = ops->mat_mul(t1, t2);
+	// r = tensor_t({m, k}, 1.0);
 
 	// ops->add(t1, t2);
 	// r = ops->add(ops->mat_mul(t1, t2), t);
 
-	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / 25;
+	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / n_iter;
 	gflops  = gflops / (seconds) / 1e9;
 
 	if (n < MAX_PRINT_DIM && m < MAX_PRINT_DIM && k < MAX_PRINT_DIM)
@@ -114,8 +128,10 @@ void tensor_mul_test() {
 	std::cout << "Testing result...\n";
 
 	// test_result(t1.data(), t2.data(), r.data(), r.size());
-	test_mat_mul(t1.data(), t2.data(), r.data(), n,m,k);
+	auto naiveSeconds = test_mat_mul(t1.data(), t2.data(), r.data(), n,m,k);
 	// test_mat_mul(t1, t2, r);
+	std::cout << "Naive time: " << naiveSeconds << "s\n";
+	std::cout << "Speedup: " << naiveSeconds / seconds << "x\n";
 
 	std::cout << "Press enter...\n";
 	
@@ -131,10 +147,10 @@ void modelTest() {
 
 	seq.compile();
 
-	matrix_t inputs({ 1, 768 }, 0.5f);
+	tensor_t inputs({ 1, 768 }, 0.5f);
 	utils::randomize(inputs.begin(), inputs.end(), inputs.size());
 
-	matrix_t expected{ {0, 1} };
+	tensor_t expected{ {0, 1} };
 	batch_t batch_input = { inputs };
 	batch_t batch_expected = { expected };
 
@@ -180,14 +196,14 @@ void matrix_mul_test() {
 	size_t bytes_size;
 
 	matrix_t m1({n, m});
-	matrix_t m2({n, m});
-	matrix_t m3({m, k});
+	matrix_t m2({m, k});
+	// matrix_t m3({m, k});
 
 	bytes_size = m1.bytesize() + m2.bytesize();
 
 	using namespace std::chrono;
 
-	double gflops = n * m * k;
+	double gflops =  2 * n * m * k; 
 	double seconds;
 	
 	matrix_t r;
@@ -216,7 +232,7 @@ void matrix_mul_test() {
 	constexpr size_t n_iter = 25;
 	for (i = 0; i < n_iter; i++)
 		// r = ops->add(t1, t2);
-		r = m1 + m2;
+		r = m1 * m2;
 
 	// ops->add(t1, t2);
 	// r = ops->add(ops->mat_mul(t1, t2), t);
@@ -249,8 +265,6 @@ int main(int argc, char** argv)
 {
     init(argc, argv, "cpu");
 
-	// printf("Matrix:\n");
-	// matrix_mul_test();
 	printf("Tensor:\n");
 	tensor_mul_test();
 }

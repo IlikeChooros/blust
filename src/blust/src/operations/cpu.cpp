@@ -38,9 +38,9 @@ void cpu_ops::M_impl_add(
     number_t n, number_t m
 ) noexcept
 {
-    assume_aligned(a_data);
-    assume_aligned(b_data);
-    assume_aligned(c_data);
+    // assume_aligned(a_data);
+    // assume_aligned(b_data);
+    // assume_aligned(c_data);
 
     // with -03 and -mavx2 this is faster
     while (size--) {
@@ -102,9 +102,9 @@ void cpu_ops::M_impl_hadamard(
     number_t /*n*/, number_t /*m*/
 ) noexcept
 {
-    assume_aligned(a_data);
-    assume_aligned(b_data);
-    assume_aligned(c_data);
+    // assume_aligned(a_data);
+    // assume_aligned(b_data);
+    // assume_aligned(c_data);
 
     // with -03 and -mavx this is faster
     while (size--) {
@@ -208,10 +208,9 @@ void cpu_ops::M_add_kernel_dot_4x4(
         vb.v = _mm_load_ps(M(b, ldb, i, 0));
         // b0, b1, b2, b3
 
-        vc0.v = _mm_add_ps(vc0.v, _mm_mul_ps(va0.v, vb.v));
+        
         // c00 = a0 * b0, c01 = a0 * b1, c02 = a0 * b2, c03 = a0 * b3
-
-        // same for the rest of the rows
+        vc0.v = _mm_add_ps(vc0.v, _mm_mul_ps(va0.v, vb.v));
         vc1.v = _mm_add_ps(vc1.v, _mm_mul_ps(va1.v, vb.v));
         vc2.v = _mm_add_ps(vc2.v, _mm_mul_ps(va2.v, vb.v));
         vc3.v = _mm_add_ps(vc3.v, _mm_mul_ps(va3.v, vb.v));
@@ -224,27 +223,103 @@ void cpu_ops::M_add_kernel_dot_4x4(
     _mm_store_ps(M(c, ldc, 3, 0), vc3.v);
 }
 
-void M_add_kernel_dot_2x2(
+void add_kernel_dot_4x4(
     pointer __restrict a, pointer __restrict b, 
     pointer __restrict c, size_t n, 
     size_t lda, size_t ldb, size_t ldc
-) 
+)
 {
-    number_t c00 = 0, c01 = 0, c10 = 0, c11 = 0;
+    number_t c00 = 0, c01 = 0, c02 = 0, c03 = 0,
+            c10 = 0, c11 = 0, c12 = 0, c13 = 0,
+            c20 = 0, c21 = 0, c22 = 0, c23 = 0,
+            c30 = 0, c31 = 0, c32 = 0, c33 = 0;
+    number_t a0, a1, a2, a3;
+    number_t b0, b1, b2, b3;
 
     // Take the whole row of a and calc dot product with the whole column of b
     for (size_t i = 0; i < n; i++) {
-        // c00 = dot(a0x, bx0)
-        c00 += *M(a, lda, 0, i) * *M(b, ldb, i, 0);
-        c01 += *M(a, lda, 0, i) * *M(b, ldb, i, 1);
-        c10 += *M(a, lda, 1, i) * *M(b, ldb, i, 0);
-        c11 += *M(a, lda, 1, i) * *M(b, ldb, i, 1);
+        // c00 = dot(a0x, bx0), c01 = dot(a0x, bx1), ...
+        b0 = *M(b, ldb, i, 0);
+        b1 = *M(b, ldb, i, 1);
+        b2 = *M(b, ldb, i, 2);
+        b3 = *M(b, ldb, i, 3);
+        
+        a0 = *M(a, lda, 0, i);
+        a1 = *M(a, lda, 1, i);
+        a2 = *M(a, lda, 2, i);
+        a3 = *M(a, lda, 3, i);
+
+        c00 += a0 * b0;
+        c01 += a0 * b1;
+        c02 += a0 * b2;
+        c03 += a0 * b3;
+
+        c10 += a1 * b0;
+        c11 += a1 * b1;
+        c12 += a1 * b2;
+        c13 += a1 * b3;
+
+        c20 += a2 * b0;
+        c21 += a2 * b1;
+        c22 += a2 * b2;
+        c23 += a2 * b3;
+
+        c30 += a3 * b0;
+        c31 += a3 * b1;
+        c32 += a3 * b2;
+        c33 += a3 * b3;
     }
 
     *M(c, ldc, 0, 0) = c00;
     *M(c, ldc, 0, 1) = c01;
+    *M(c, ldc, 0, 2) = c02;
+    *M(c, ldc, 0, 3) = c03;
+
     *M(c, ldc, 1, 0) = c10;
     *M(c, ldc, 1, 1) = c11;
+    *M(c, ldc, 1, 2) = c12;
+    *M(c, ldc, 1, 3) = c13;
+
+    *M(c, ldc, 2, 0) = c20;
+    *M(c, ldc, 2, 1) = c21;
+    *M(c, ldc, 2, 2) = c22;
+    *M(c, ldc, 2, 3) = c23;
+
+    *M(c, ldc, 3, 0) = c30;
+    *M(c, ldc, 3, 1) = c31;
+    *M(c, ldc, 3, 2) = c32;
+    *M(c, ldc, 3, 3) = c33;
+}
+
+void M_tiled_multiply(
+    size_t m, size_t n, size_t k, pointer __restrict a, 
+    pointer __restrict b, pointer __restrict c, 
+    size_t lda, size_t ldb, size_t ldc
+) noexcept
+{
+    // Should be sqrt(M), where M is size of the cache in bytes,
+    // choosing 256*256 = 65356 as default
+    constexpr auto tile_size = 256;
+    
+    // nxm, mxp
+    for (int I = 0; I < m; I += tile_size) {
+        for (int J = 0; J < k; J += tile_size) {
+            for (int K = 0; K < n; K += tile_size) {
+                
+                // Multiply A(I:I+T, K:K+T) * B(K:K+T, J:J+T) = C(I:I+T, J:J+T)
+                for (int i = I; i < std::min(I+tile_size, int(m)); i++) {
+                    for (int j = J; j < std::min(J+tile_size, int(k)); j++) {
+                        number_t sum = 0;
+
+                        for (int l = K; l < std::min(K+tile_size, int(n)); l++) {
+                            sum += *M(a, lda, i, l) * *M(b, ldb, l, j);
+                        }
+                        *M(c, ldc, i, j) = sum;
+                    }
+                }
+            }
+        }
+    }
 }
 
 template <size_t kernel_size>
@@ -255,6 +330,8 @@ void cpu_ops::M_inner_kernel(
 ) noexcept
 {
     size_t cols = 0, rows = 0;
+    std::array<number_t, kernel_size> aPack, bPack;
+    // pointer aPack[kernel_size*kernel_size], bPack[kernel_size*kernel_size];
 
     for (; rows < m; rows+=kernel_size) // loop over the columns of c (and b's)
     {
@@ -265,6 +342,7 @@ void cpu_ops::M_inner_kernel(
         {
             if (cols + kernel_size > k) 
                 break;
+        
 
             // Calculate the dot product of a row of A
             // and a column of B
@@ -314,32 +392,37 @@ void cpu_ops::M_calc_kernel_dot(
     size_t m, size_t n, size_t k, size_t lda, size_t ldb, size_t ldc
 ) noexcept
 {
-    M_inner_kernel<2>(
-        m, n, k, a, b, c, lda, ldb, ldc, M_add_kernel_dot_2x2
-    );
-
-    // M_inner_kernel<kernel_size>(
-    //     m, n, k, a, b, c, lda, ldb, ldc, kernel
-    // );
-
     // constexpr size_t pack_size_m = 256, pack_size_n = 128;
 
     // size_t packed_m, packed_n;
-
     // for (size_t i = 0; i < n; i += pack_size_n)
     // {
     //     packed_n = std::min(pack_size_n, n - i);
     //     for (size_t j = 0; j < m; j += pack_size_m)
     //     {
     //         packed_m = std::min(pack_size_m, m - j);
-    //         M_inner_kernel<kernel_size>(
+    //         M_inner_kernel<4>(
     //             packed_m, packed_n, k,
     //             M(a, lda, j, i), M(b, ldb, i, 0), 
     //             M(c, ldc, j, 0),
-    //             lda, ldb, ldc, kernel
+    //             lda, ldb, ldc,
+    //             add_kernel_dot_4x4
     //         );
     //     }
     // }
+
+    // M_inner_kernel<4>(
+    //     m, n, k, a, b, c, lda, ldb, ldc, add_kernel_dot_4x4
+    // );
+    // M_tiled_multiply(m, n, k, a, b, c, lda, ldb, ldc);
+
+    // M_inner_kernel<8>(
+    //     m, n, k, a, b, c, lda, ldb, ldc, M_add_kernel_dot_8x8
+    // );
+
+    M_inner_kernel<kernel_size>(
+        m, n, k, a, b, c, lda, ldb, ldc, kernel
+    );
 }
 
 
@@ -353,11 +436,10 @@ void cpu_ops::M_impl_matumul(
     size_t m, size_t n, size_t k
 ) noexcept
 {
-    M_inner_kernel<2>(m, n, k, a, b, c, lda, ldb, ldc, M_add_kernel_dot_2x2);
-    // if constexpr (type == matmul_type::avx2)
-    //     M_calc_kernel_dot<8>(a, b, c, M_add_kernel_dot_8x8, m, n, k, lda, ldb, ldc);
-    // else
-    //     M_calc_kernel_dot<4>(a, b, c, M_add_kernel_dot_4x4, m, n, k, lda, ldb, ldc);
+    if constexpr (type == matmul_type::avx2)
+        M_calc_kernel_dot<8>(a, b, c, M_add_kernel_dot_8x8, m, n, k, lda, ldb, ldc);
+    else
+        M_calc_kernel_dot<4>(a, b, c, M_add_kernel_dot_4x4, m, n, k, lda, ldb, ldc);
 }
 
 
@@ -385,7 +467,8 @@ inline tensor_t cpu_ops::M_get_res_tensor(tensor_t& a, tensor_t& b)
 inline tensor_t cpu_ops::M_perform_vector_like(
     tensor_t& a, tensor_t& b, 
     number_t n, number_t m, 
-    func_vector_t func
+    func_vector_t func,
+    bool allocate
 )
 {
     BLUST_ASSERT(a.dim()==b.dim());
@@ -423,41 +506,41 @@ inline tensor_t cpu_ops::M_perform_vector_like(
 /**
  * @brief Add two tensors and return the result
  */
-tensor_rref_t cpu_ops::add(tensor_t a, tensor_t b) 
+tensor_rref_t cpu_ops::add(tensor_t a, tensor_t b, bool allocate) 
 {
-    return M_perform_vector_like(a, b, 1.0, 1.0, M_impl_add);
+    return M_perform_vector_like(a, b, 1.0, 1.0, M_impl_add, allocate);
 }
 
 /**
  * @brief Perform substaction (a - b) and return the result
  */
-tensor_rref_t cpu_ops::sub(tensor_t a, tensor_t b) 
+tensor_rref_t cpu_ops::sub(tensor_t a, tensor_t b, bool allocate) 
 {
-    return M_perform_vector_like(a, b, 1.0, -1.0, M_impl_add);
+    return M_perform_vector_like(a, b, 1.0, -1.0, M_impl_add, allocate);
 }
 
 /**
  * @brief Caluculate Ri = Ai * b (see hadamard for element-wise multiplication)
  */
-tensor_rref_t cpu_ops::mul(tensor_t a, number_t b) 
+tensor_rref_t cpu_ops::mul(tensor_t a, number_t b, bool allocate) 
 {
-    return M_perform_vector_like(a, a, b, 0.0, M_impl_add); // c = a * b + a * 0
+    return M_perform_vector_like(a, a, b, 0.0, M_impl_add, allocate); // c = a * b + a * 0
 }
 
 /**
  * @brief Calculate Ri = Ai / b
  */
-tensor_rref_t cpu_ops::div(tensor_t a, number_t b) 
+tensor_rref_t cpu_ops::div(tensor_t a, number_t b, bool allocate) 
 {
-    return M_perform_vector_like(a, a, 1 / b, 0.0, M_impl_add);
+    return M_perform_vector_like(a, a, 1 / b, 0.0, M_impl_add, allocate);
 }
 
 /**
  * @brief Get the hadamard product: Ci = Ai * Bi
  */
-tensor_rref_t cpu_ops::hadamard(tensor_t a, tensor_t b)
+tensor_rref_t cpu_ops::hadamard(tensor_t a, tensor_t b, bool allocate)
 {
-    return M_perform_vector_like(a, b, 0, 0, M_impl_hadamard);
+    return M_perform_vector_like(a, b, 0, 0, M_impl_hadamard, allocate);
 }
 
 /**
@@ -470,9 +553,9 @@ tensor_rref_t cpu_ops::mat_mul(tensor_t a, tensor_t b)
 {
     M_assert_tensor_dim_mat_mul(a, b);
 
-    const int m_rows = a.dim()[0];
-    const int n_cols = a.dim()[1];
-    const int k_cols = b.dim()[1];
+    const size_t m_rows = a.dim()[0];
+    const size_t n_cols = a.dim()[1];
+    const size_t k_cols = b.dim()[1];
 
     auto res = ops_tensor({m_rows, k_cols});
     
@@ -484,6 +567,11 @@ tensor_rref_t cpu_ops::mat_mul(tensor_t a, tensor_t b)
     );
 
     return std::move(res);
+}
+
+tensor_rref_t cpu_ops::transpose(tensor_t a)
+{
+    return std::move(a);
 }
 
 END_BLUST_NAMESPACE

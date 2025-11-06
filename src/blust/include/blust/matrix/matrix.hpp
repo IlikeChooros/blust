@@ -12,8 +12,11 @@
 
 START_BLUST_NAMESPACE
 
+template <typename T>
+concept MT = std::is_same_v<float, T> || std::is_same_v<double, T>;
+
 // Matrix with given `dtype` 
-template <typename dtype, std::enable_if_t<std::is_arithmetic_v<dtype>, int> = 0>
+template <MT dtype>
 class matrix
 {
 public:

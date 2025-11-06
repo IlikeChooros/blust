@@ -12,41 +12,41 @@ class SGD : public Optimizer
 {
 private:
 
-	typedef void(*update_func_t)(matrix_t&, matrix_t&, matrix_t&, number_t, number_t);
+	typedef void(*update_func_t)(tensor_t&, tensor_t&, tensor_t&, number_t, number_t);
 
 	number_t m_momentum;
 	bool m_nesterov;
 	number_t m_clipnorm;
 	number_t m_clipvalue;
-	matrix_t m_velocity_w;
-	matrix_t m_velocity_b;
+	tensor_t m_velocity_w;
+	tensor_t m_velocity_b;
 	update_func_t m_updater;
 
 
 	// If nestrov is enabled, update the weights with nestrov
 	static void M_update_nestrov(
-		matrix_t& velocity, matrix_t& grad, matrix_t& w, number_t learning_rate, number_t momentum
+		tensor_t& velocity, tensor_t& grad, tensor_t& w, number_t learning_rate, number_t momentum
 	)
 	{
-		velocity = momentum * velocity - learning_rate * grad;
-		w		+= momentum * velocity - learning_rate * grad;
+		// velocity = momentum * velocity - learning_rate * grad;
+		// w		+= momentum * velocity - learning_rate * grad;
 	}
 
 	// Update the weights without nestrov (momentum is larger than 0)
 	static void M_update_momentum(
-		matrix_t& velocity, matrix_t& grad, matrix_t& w, number_t learning_rate, number_t momentum
+		tensor_t& velocity, tensor_t& grad, tensor_t& w, number_t learning_rate, number_t momentum
 	)
 	{
-		velocity = momentum * velocity - learning_rate * grad;
-		w		+= velocity;
+		// velocity = momentum * velocity - learning_rate * grad;
+		// w		+= velocity;
 	}
 
 	// Update the weights without momentum
 	static void M_update(
-		matrix_t& /*velocity*/, matrix_t& grad, matrix_t& w, number_t learning_rate, number_t /*momentum*/
+		tensor_t& /*velocity*/, tensor_t& grad, tensor_t& w, number_t learning_rate, number_t /*momentum*/
 	)
 	{
-		w -= learning_rate * grad;
+		// w -= learning_rate * grad;
 	}
 
 	// The updater function
@@ -112,21 +112,21 @@ public:
 		M_set_updater();
 	}
 
-	void build(shape2D wdim, shape2D bdim) override
+	void build(shape wdim, shape bdim) override
 	{
-		m_velocity_w = matrix_t::zeros(wdim);
-		m_velocity_b = matrix_t::zeros(bdim);
+		m_velocity_w = tensor_t(wdim);
+		m_velocity_b = tensor_t(bdim);
 	}
 
 	// Update the weights and biases
-	void update_step(matrix_t& grad_w, matrix_t& grad_b, matrix_t& w, matrix_t& b, number_t learning_rate) override
+	void update_step(tensor_t& grad_w, tensor_t& grad_b, tensor_t& w, tensor_t& b, number_t learning_rate) override
 	{
 		m_updater(m_velocity_w, grad_w, w, learning_rate, m_momentum);
 		m_updater(m_velocity_b, grad_b, b, learning_rate, m_momentum);
 	}
 
 	// Update the weights
-	void update_step(matrix_t& grad_w, matrix_t& w, number_t learning_rate) override
+	void update_step(tensor_t& grad_w, tensor_t& w, number_t learning_rate) override
 	{
 		m_updater(m_velocity_w, grad_w, w, learning_rate, m_momentum);
 	}

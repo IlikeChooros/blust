@@ -5,7 +5,7 @@ using namespace blust;
 
 void test_mat_mul(number_t *a_data, number_t *b_data, number_t *c_data, size_t n, size_t m, size_t k)
 {
-    tensor r{{(int)n, (int)k}};
+    tensor r{{n, k}};
     auto r_data = r.data();
 
     for (size_t i = 0; i < n; i++)
@@ -67,7 +67,7 @@ TEST(OpsTest, MatMul)
     std::uniform_int_distribution<int> dist{minSize, maxSize};
     cpu_ops ops;
     tensor t1, t2, r;
-    int m, n, k;
+    size_t m, n, k;
 
     for (auto i = 0; i < nMults; i++)
     {
@@ -99,9 +99,9 @@ TEST(OpsTest, SquarePowerOf2Matmul)
     cpu_ops ops;
     tensor t1, t2, r;
 
-    for (int i = 0; i < max_pow; i++)
+    for (size_t i = 0; i < max_pow; i++)
     {
-        auto v = (1 << i);
+        size_t v = (1 << i);
         auto s = shape({v, v});
         t1 = tensor(s);
         t2 = tensor(s);
@@ -133,7 +133,7 @@ void testVectorLike(VectorOp op) {
     std::uniform_int_distribution<int> dist{minSize, maxSize};
     cpu_ops ops(4); // allow multithreaded vector operations
     tensor t1, t2, r;
-    int n, m;
+    size_t n, m;
     std::function<number_t(number_t, number_t)> f;
     std::function<tensor(tensor&, tensor&)> top;
 

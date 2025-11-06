@@ -12,7 +12,6 @@
 #include "datasets/mnist.hpp"
 #include "backend/operations.hpp"
 #include "tensor.hpp"
-#include "backend/ops.hpp"
 
 START_BLUST_NAMESPACE
 

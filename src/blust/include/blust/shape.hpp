@@ -15,7 +15,7 @@ public:
     typedef std::vector<size_t> dim_t;
 
     // Create a shape object with given inital dimensions as a initializer list
-    shape(std::initializer_list<int> dims) noexcept
+    shape(std::initializer_list<size_t> dims) noexcept
     {
         m_dims.reserve(dims.size());
         for (auto& d : dims)

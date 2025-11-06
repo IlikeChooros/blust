@@ -25,17 +25,17 @@ public:
 	virtual void compile(Optimizer* optimizer, error_funcs loss = mean_squared_error);
 
     // Feed forward the model
-    void call(matrix_t& inputs);
+    void call(tensor_t& inputs);
 
     // Get predictions from the model
-    inline matrix_t& predict(matrix_t& inputs)
+    inline tensor_t& predict(tensor_t& inputs)
     {
         call(inputs);
         return m_output_layer->m_activations;
     }
     
     // Backpropagte on a single data input
-    void backprop(matrix_t& expected);
+    void backprop(tensor_t& expected);
 	void apply_gradients(size_t steps, size_t batch_size);
     void fit(batch_t& inputs, batch_t& expected, size_t batch_size = 30);
     void train_on_batch(batch_t& inputs, batch_t& expected);

@@ -20,8 +20,8 @@ class Dense : public WeightedLayer
     base_function_t m_func_deriv    = nullptr;
 
     // Derivatives
-    matrix_t m_biases               = {};
-    matrix_t m_d_biases             = {};
+    tensor_t m_biases               = {};
+    tensor_t m_d_biases             = {};
 
 public:
 	friend class Sequential;
@@ -62,11 +62,11 @@ public:
     }
 
     // Build the Dense layer (allocates the memory for matrices)
-    void build(shape2D input_shape, activations type = none, error_funcs err = mean_squared_error) 
+    void build(shape input_shape, activations type = none, error_funcs err = mean_squared_error) 
     {
         m_built         = true;
-        m_inputs_size   = input_shape.y;
-        m_output_shape  = {input_shape.x, m_output_size};
+        m_inputs_size   = input_shape.dim()[1];
+        m_output_shape  = {input_shape.dim()[0], m_output_size};
         auto funcs      = get_functions(type);
         m_func_activ    = funcs.activ;
         m_func_deriv    = funcs.deriv;
@@ -92,35 +92,35 @@ public:
     }
 
     // Calculate the hidden gradient, expects next layer to be a child of `BaseDense` (or none)
-    void gradient(matrix_t& inputs) override
+    void gradient(tensor_t& inputs) override
     {
         // Calculate the partial derivative:
         // N_(L-1) = P_(L) * W_(L).T
         // P_(L-1) = N_(L-1) % A_(L-1)
         // then dC/dW_(L-1) = A_(L-2).T * P_(L-1)
         auto next       = dynamic_cast<WeightedLayer*>(m_next);
-        auto N          = next->m_partial_deriv * next->m_weights.T();
+        auto N          = ops->mat_mul(next->m_partial_deriv, ops->transpose(next->m_weights));
         auto dA         = m_func_deriv(m_activations);
-        m_partial_deriv = N % dA;
+        m_partial_deriv = ops->hadamard(N, dA);
 
-        m_d_weights     += inputs.T() * m_partial_deriv;
-        m_d_biases      += m_partial_deriv;
+        m_d_weights     = ops->add(m_d_weights, ops->mat_mul(ops->transpose(inputs), m_partial_deriv), false);
+        m_d_biases      = ops->add(m_d_biases, m_partial_deriv, false);
     }
 
     // Calculate the output gradient
-    void gradient(matrix_t& inputs, matrix_t& expected, error_functor_t& func) override
+    void gradient(tensor_t& inputs, tensor_t& expected, error_functor_t& func) override
     {
         auto dA          = m_func_deriv(m_activations);
         auto dC          = func->d_cost(m_activations, expected);
-        m_partial_deriv  = dA % dC;
-        m_d_weights     += inputs.T() * m_partial_deriv;
-        m_d_biases      += m_partial_deriv;
+        m_partial_deriv  = ops->hadamard(dA, dC);
+        m_d_weights      = ops->add(m_d_weights, ops->mat_mul(ops->transpose(inputs), m_partial_deriv), false);
+        m_d_biases       = ops->add(m_d_biases, m_partial_deriv, false);
     }
 
     void apply(number_t learning_rate = 0.2, size_t batch_size = 1)
     {
-		m_d_weights /= batch_size;
-		m_d_biases /= batch_size;
+		m_d_weights = ops->div(m_d_weights, batch_size);
+		m_d_biases  = ops->div(m_d_weights, batch_size);
 
 		m_optimizer->update_step(m_d_weights, m_d_biases, m_weights, m_biases, learning_rate);
 
@@ -135,22 +135,23 @@ public:
      * @brief Multiply the inputs by weights and add biases, return the result
      * @throw `InvalidMatrixSize` if the specified inputs are the same dimensions as specified in `build`
      */
-    matrix_t& feed_forward(matrix_t& inputs) override
+    tensor_t& feed_forward(tensor_t& inputs) override
     {
-        m_weighted_input = inputs * m_weights;
-        m_weighted_input += m_biases;
+        // m_weighted_input = inputs * m_weights;
+        // m_weighted_input += m_biases;
+        m_weighted_input = ops->add(m_biases, ops->mat_mul(inputs, m_weights));
         m_activations    = m_func_activ(m_weighted_input);
         return m_activations;
     }
 
     // Get the total cost of the network, based on the specified error function
-    number_t cost(matrix_t& expected, error_functor_t& error) override
+    number_t cost(tensor_t& expected, error_functor_t& error) override
     {
         return error->error(m_activations, expected);
     }
 
-    matrix_t& get_biases() { return m_biases; }
-    matrix_t& get_gradient_b() { return m_d_biases; }
+    tensor_t& get_biases() { return m_biases; }
+    tensor_t& get_gradient_b() { return m_d_biases; }
 };
 
 END_BLUST_NAMESPACE

@@ -52,10 +52,10 @@ void Model::compile(Optimizer* optimizer, error_funcs loss)
     }
 }
 
-void Model::call(matrix_t& inputs)
+void Model::call(tensor_t& inputs)
 {
     BaseLayer* next     = m_input_layer;
-    matrix_t* p_inputs  = &inputs; // avoid too much copying
+    tensor_t* p_inputs  = &inputs; // avoid too much copying
 
     while (next != nullptr) {
         p_inputs = &next->feed_forward(*p_inputs);
@@ -63,7 +63,7 @@ void Model::call(matrix_t& inputs)
     }
 }
 
-void Model::backprop(matrix_t& expected)
+void Model::backprop(tensor_t& expected)
 {
     auto layer      = dynamic_cast<BaseLearningLayer*>(m_output_layer);
     auto prev       = dynamic_cast<BaseLearningLayer*>(m_output_layer->m_prev);

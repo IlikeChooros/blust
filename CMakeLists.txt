@@ -4,7 +4,8 @@ project(BlustDL LANGUAGES C CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 20)
 
-set(GNU_RELEASE_FLAGS "-O3 -ffast-math -march=x86-64-v3 ")
+set(GNU_RELEASE_FLAGS "-O3 -ffast-math -march=x86-64-v3")
+# set(GNU_RELEASE_FLAGS "-O0")
 set(WIN_RELEASE_FLAGS "/O2 /arch:AVX2 /fp:fast")
 set(GNU_DEBUG_FLAGS "-O0 -g -march=x86-64-v3")
 set(WIN_DEBUG_FLAGS "/Od /Zi")
@@ -21,7 +22,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${WIN_DEBUG_FLAGS}")
 endif()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
 
 
 # cuda
@@ -65,7 +66,7 @@ add_custom_target(generate_fatbin ALL DEPENDS ${CUDA_FATBIN_FILE})
 add_dependencies(${PROJECT_NAME} generate_fatbin)
 
 install(TARGETS ${PROJECT_NAME})
-include(CTest)
+# include(CTest)
 
 # Tests
 enable_testing()

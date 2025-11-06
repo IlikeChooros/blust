@@ -8,7 +8,6 @@ add_executable(
 	${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc
 	${CMAKE_CURRENT_SOURCE_DIR}/src/tensor_test.cc
 	${CMAKE_CURRENT_SOURCE_DIR}/src/ops_test.cc
-	${CMAKE_CURRENT_SOURCE_DIR}/src/matrix_test.cc
 )
 
 target_link_libraries(BlustTests PUBLIC GTest::gtest GTest::gtest_main blust)
