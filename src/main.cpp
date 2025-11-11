@@ -108,12 +108,7 @@ void tensor_mul_test() {
 	auto start = high_resolution_clock::now();
 	constexpr size_t n_iter = 5;
 	for (i = 0; i < n_iter; i++)
-		// r = ops->add(t1, t2);
 		r = ops->mat_mul(t1, t2);
-	// r = tensor_t({m, k}, 1.0);
-
-	// ops->add(t1, t2);
-	// r = ops->add(ops->mat_mul(t1, t2), t);
 
 	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / n_iter;
 	gflops  = gflops / (seconds) / 1e9;
@@ -130,9 +125,72 @@ void tensor_mul_test() {
 	
 	std::cout << "Testing result...\n";
 
-	// auto naiveSeconds = test_result(t1.data(), t2.data(), r.data(), r.size());
 	auto naiveSeconds = test_mat_mul(t1.data(), t2.data(), r.data());
-	// test_mat_mul(t1, t2, r);
+	std::cout << "Naive time: " << naiveSeconds << "s\n";
+	std::cout << "Speedup: " << naiveSeconds / seconds << "x\n";
+
+	std::cout << "Press enter...\n";
+	
+	getchar();
+}
+
+void tesor_add_test() {
+	size_t bytes_size;
+
+	tensor t1({m * m});
+	tensor t2({m * m});
+
+	bytes_size = t1.bytesize() + t2.bytesize();
+
+	using namespace std::chrono;
+	double gflops = 2 * m * m;
+	double seconds;
+	
+	tensor r;
+	number_t i = 1;
+
+	if (n < MAX_PRINT_DIM && m < MAX_PRINT_DIM && k < MAX_PRINT_DIM)
+	{
+		t1.fill([&i](){ return i++; });
+		t2.fill([&i](){ return i++; });
+		std::cout << t1 << std::endl;
+		std::cout << t2 << std::endl;
+	}
+	else
+	{
+		std::random_device rd{};
+		std::mt19937 gen{rd()};
+		std::uniform_real_distribution<number_t> dist{0, 1};
+		t1.fill([&dist, &gen](){ return dist(gen); });
+		t2.fill([&dist, &gen](){ return dist(gen); });
+	}
+
+	std::cout.setf(std::ios::fixed);
+	std::cout.precision(3);
+	std::cout << "Size: " << bytes_size / 1e6 << "MB\n";
+	std::cout << "Starting...\n";
+
+	auto start = high_resolution_clock::now();
+	constexpr size_t n_iter = 5;
+	for (i = 0; i < n_iter; i++)
+		r = ops->add(t1, t2);
+
+	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / n_iter;
+	gflops  = gflops / (seconds) / 1e9;
+
+	if (n < MAX_PRINT_DIM && m < MAX_PRINT_DIM && k < MAX_PRINT_DIM)
+		std::cout << r << '\n';
+
+	std::cout 
+		<< "time=" << seconds
+			<< "s gflops="<< gflops 
+			<< " n_allocs=" << tensor::n_allocs 
+			<< " max_allocs=" << tensor::max_allocs
+			<< "\n";
+	
+	std::cout << "Testing result...\n";
+
+	auto naiveSeconds = test_result(t1.data(), t2.data(), r.data(), r.size());
 	std::cout << "Naive time: " << naiveSeconds << "s\n";
 	std::cout << "Speedup: " << naiveSeconds / seconds << "x\n";
 
@@ -270,5 +328,6 @@ int main(int argc, char** argv)
 
 	printf("Tensor:\n");
 	tensor_mul_test();
+	// tesor_add_test();
 	// modelTest();
 }

@@ -9,5 +9,7 @@
 opt_gemm
 opt_gemm.c
 temp.py
+matmul.py
+vecadd.py
 .github
 .vscode/c_cpp_properties.json

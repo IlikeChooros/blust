@@ -37,7 +37,7 @@ class cpu_ops : public operations
         size_t size, number_t, number_t
     ) noexcept(true);
 
-    template <size_t kernel_size>
+    template <size_t kernel_r, size_t kernel_c>
     void M_inner_kernel(
         size_t m, size_t n, size_t k, pointer __restrict a, 
         pointer __restrict b, pointer __restrict c, 
@@ -81,7 +81,7 @@ class cpu_ops : public operations
 
     // Checks if the size is big enough to launch threads
     inline bool M_should_lanuch_threads(size_t size) noexcept {
-        return m_ncores > 1 && size > 2e5;
+        return m_ncores > 1 && size > 5e5;
     }
 
     // Joins all the threads
@@ -97,8 +97,7 @@ class cpu_ops : public operations
     number_t *aPacked{nullptr}, *bPacked{nullptr};
 
 public:
-    static constexpr size_t KERNEL_R = 4, KERNEL_C = 4; // kernel dimensions (R x C)
-    static constexpr size_t MC = 256, NC = 128, KC = 256; // L3 cache blocking
+    static constexpr size_t MC = 256, NC = 128, KC = 256; // L2 cache blocking
 
     cpu_ops(int n_threads = 1);
     ~cpu_ops();

@@ -2,6 +2,27 @@
 
 #include <sys/time.h>
 
+
+/*
+
+This file contains implementation of gemm and other 1d operations
+
+Right now the speed of the matrix multiplication is 2.5x slower on my
+pc than numpy's.
+
+Further optimization:
+- use prefetching
+Need to read more about it
+
+- make the register-friendly micro-kernel size 
+(there is 16 avx2 registers), but in 8x8 kernel I'm using
+17 of them -> reduce the kernel size to 8x6 
+(doesn't offer better performance)
+
+- parallelize with openmp
+
+*/
+
 START_BLUST_NAMESPACE
 
 typedef operations::tensor_t tensor_t;
@@ -56,7 +77,6 @@ void cpu_ops::M_impl_add(
     assume_aligned(c_data);
 
     // with -03 and -mavx2 this is faster
-    #pragma omp parallel for
     for (size_t i = 0; i < size; i++) {
         c_data[i] = a_data[i] * n + b_data[i] * m;
     }  
@@ -86,6 +106,115 @@ constexpr pointer M(pointer m, size_t ldm, size_t y, size_t x) noexcept {
     return m + y * ldm + x;
 }
 
+void add_kernel_dot_6x8(
+    pointer __restrict a, pointer __restrict b, 
+    pointer __restrict c, size_t n, 
+    size_t lda, size_t ldb, size_t ldc
+) noexcept
+{
+    assume_aligned(a);
+    assume_aligned(b);
+    assume_aligned(c);
+
+    vec8f_t 
+        va0, va1, va2, va3, va4, va5,
+        vb,
+        vc0, vc1, vc2, vc3, vc4, vc5;
+    
+    vc0.v = _mm256_setzero_ps(); vc1.v = _mm256_setzero_ps();
+    vc2.v = _mm256_setzero_ps(); vc3.v = _mm256_setzero_ps();
+    vc4.v = _mm256_setzero_ps(); vc5.v = _mm256_setzero_ps();
+
+    for (size_t i = 0; i < n; i++)
+    {
+        // Load the first cols of a
+        va0.v = _mm256_set1_ps(*M(a, lda, 0, i));
+        va1.v = _mm256_set1_ps(*M(a, lda, 1, i));
+        va2.v = _mm256_set1_ps(*M(a, lda, 2, i));
+        va3.v = _mm256_set1_ps(*M(a, lda, 3, i));
+        va4.v = _mm256_set1_ps(*M(a, lda, 4, i));
+        va5.v = _mm256_set1_ps(*M(a, lda, 5, i));
+
+        // Load row of b (8 elements, at ith row)
+        vb.v = _mm256_loadu_ps(M(b, ldb, i, 0));
+
+        // c00 = a0 * b0, c01 = a0 * b1, c02 = a0 * b2, c03 = a0 * b3
+        // vc0.v = _mm256_add_ps(vc0.v, _mm256_mul_ps(va0.v, vb.v));
+        // vc1.v = _mm256_add_ps(vc1.v, _mm256_mul_ps(va1.v, vb.v));
+        // vc2.v = _mm256_add_ps(vc2.v, _mm256_mul_ps(va2.v, vb.v));
+        // vc3.v = _mm256_add_ps(vc3.v, _mm256_mul_ps(va3.v, vb.v));
+        // vc4.v = _mm256_add_ps(vc4.v, _mm256_mul_ps(va4.v, vb.v));
+        // vc5.v = _mm256_add_ps(vc5.v, _mm256_mul_ps(va5.v, vb.v));
+        // vc6.v = _mm256_add_ps(vc6.v, _mm256_mul_ps(va6.v, vb.v));
+        // vc7.v = _mm256_add_ps(vc7.v, _mm256_mul_ps(va7.v, vb.v));
+        vc0.v = _mm256_fmadd_ps(va0.v, vb.v, vc0.v);
+        vc1.v = _mm256_fmadd_ps(va1.v, vb.v, vc1.v);
+        vc2.v = _mm256_fmadd_ps(va2.v, vb.v, vc2.v);
+        vc3.v = _mm256_fmadd_ps(va3.v, vb.v, vc3.v);
+        vc4.v = _mm256_fmadd_ps(va4.v, vb.v, vc4.v);
+        vc5.v = _mm256_fmadd_ps(va5.v, vb.v, vc5.v);
+    }
+
+    // Add to previous c vector the result, and store it in c
+    _mm256_store_ps(M(c, ldc, 0, 0), 
+        _mm256_add_ps(_mm256_load_ps(M(c, ldc, 0, 0)), vc0.v));
+
+    _mm256_store_ps(M(c, ldc, 1, 0), 
+        _mm256_add_ps(_mm256_load_ps(M(c, ldc, 1, 0)), vc1.v));
+
+    _mm256_store_ps(M(c, ldc, 2, 0), 
+        _mm256_add_ps(_mm256_load_ps(M(c, ldc, 2, 0)), vc2.v));
+
+    _mm256_store_ps(M(c, ldc, 3, 0), 
+        _mm256_add_ps(_mm256_load_ps(M(c, ldc, 3, 0)), vc3.v));
+
+    _mm256_store_ps(M(c, ldc, 4, 0), 
+        _mm256_add_ps(_mm256_load_ps(M(c, ldc, 4, 0)), vc4.v));
+
+    _mm256_store_ps(M(c, ldc, 5, 0), 
+        _mm256_add_ps(_mm256_load_ps(M(c, ldc, 5, 0)), vc5.v));
+}
+
+void scalar_kernel_6x1(
+    pointer __restrict a, pointer __restrict b, 
+    pointer __restrict c, size_t n, 
+    size_t lda, size_t ldb, size_t ldc
+)
+{
+    number_t 
+        c00 = 0, c10 = 0, c20 = 0, c30 = 0,
+        c40 = 0, c50 = 0;
+    number_t a0, a1, a2, a3, a4, a5;
+    number_t b0;
+
+    for (size_t i = 0; i < n; i++) {
+        b0 = *M(b, ldb, i, 0);
+        
+        // Don't know how to make it vectorized,
+        // the 'a' matrix is row-major, so I cannot
+        // load the data like a column.
+        a0 = *M(a, lda, 0, i);
+        a1 = *M(a, lda, 1, i);
+        a2 = *M(a, lda, 2, i);
+        a3 = *M(a, lda, 3, i);
+        a4 = *M(a, lda, 4, i);
+        a5 = *M(a, lda, 5, i);
+
+        c00 += a0 * b0;
+        c10 += a1 * b0;
+        c20 += a2 * b0;
+        c30 += a3 * b0;
+        c40 += a4 * b0;
+        c50 += a5 * b0;
+    }
+
+    *M(c, ldc, 0, 0) += c00;
+    *M(c, ldc, 1, 0) += c10;
+    *M(c, ldc, 2, 0) += c20;
+    *M(c, ldc, 3, 0) += c30;
+    *M(c, ldc, 4, 0) += c40;
+    *M(c, ldc, 5, 0) += c50;
+}
 
 void cpu_ops::M_add_kernel_dot_8x8(
     pointer __restrict a, pointer __restrict b, 
@@ -539,7 +668,7 @@ void M_tiled_multiply(
     }
 }
 
-void packA(number_t* pack, number_t* A, size_t m, size_t n, size_t lda) {
+void packRowMajor(number_t* pack, number_t* A, size_t m, size_t n, size_t lda) {
     // Assumes m * n is a multiple of 32
     // number_t* pack = utils::aligned_alloc<32, number_t>(m * n);
     for (size_t i = 0; i < m; i++) {
@@ -555,7 +684,7 @@ void packA(number_t* pack, number_t* A, size_t m, size_t n, size_t lda) {
 // in standard case lda = n, ldb = k, ldc = k
 // 
 // kernel calculates mini matrix multiplication (using 4x4 size)
-template <size_t kernel_size>
+template <size_t kernel_r, size_t kernel_c>
 void cpu_ops::M_inner_kernel(
     size_t m, size_t n, size_t k, pointer __restrict A, 
     pointer __restrict B, pointer __restrict C, 
@@ -565,7 +694,7 @@ void cpu_ops::M_inner_kernel(
     func_scalar_kernel_t kernel_Nx1
 ) noexcept
 {
-    constexpr auto MR = kernel_size, NR = kernel_size;
+    constexpr auto MR = kernel_r, NR = kernel_c;
 
     // number_t* aPacked = utils::aligned_alloc<32, number_t>(MC * NC);
     // number_t* bPacked = utils::aligned_alloc<32, number_t>(NC * KC);
@@ -581,7 +710,7 @@ void cpu_ops::M_inner_kernel(
             const size_t nc = std::min(NC, n - N0);
 
             // Pack B(N0:N0+nc, K0:K0+kc) into bPacked
-            packA(bPacked, &B[N0 * ldb + K0], nc, kc, ldb);
+            packRowMajor(bPacked, &B[N0 * ldb + K0], nc, kc, ldb);
 
             // std::cout << "BBB: ";
             // utils::print_matrix(bPacked, nc, kc);
@@ -590,7 +719,11 @@ void cpu_ops::M_inner_kernel(
                 size_t mc = std::min(MC, m - M0);
         
                 // Pack A(M0:M0+mc, N0:N0+nc) to aPacked
-                packA(aPacked, &A[M0 * lda + N0], mc, nc, lda);
+                packRowMajor(aPacked, &A[M0 * lda + N0], mc, nc, lda);
+
+                if (M0 + MC < m) {
+                    _mm_prefetch((const char*)&A[(M0 + MC) * lda + N0], _MM_HINT_T2);
+                }
 
                 // std::cout << "AAA: ";
                 // utils::print_matrix(aPacked, mc, nc);
@@ -673,18 +806,24 @@ void cpu_ops::M_impl_matumul(
     size_t m, size_t n, size_t k
 ) noexcept
 {
-    // M_inner_kernel<4>(
+    // M_inner_kernel<4, 4>(
     //     m, n, k, a, b, c, lda, ldb, ldc, 
     //     M_add_kernel_dot_4x4, 
     //     scalar_kernel_1x4,
     //     scalar_kernel_4x1
     // );
-    M_inner_kernel<8>(
+    M_inner_kernel<8, 8>(
         m, n, k, a, b, c, lda, ldb, ldc, 
         M_add_kernel_dot_8x8, 
         scalar_kernel_1x8,
         scalar_kernel_8x1
     );
+    // M_inner_kernel<6, 8>(
+    //     m, n, k, a, b, c, lda, ldb, ldc, 
+    //     add_kernel_dot_6x8, 
+    //     scalar_kernel_1x8,
+    //     scalar_kernel_6x1
+    // );
 }
 
 
@@ -722,27 +861,27 @@ inline tensor_t cpu_ops::M_perform_vector_like(
     // calculate the result
 
     const auto size = res.size();
-    // if (M_should_lanuch_threads(size)) 
-    // {
-    //     // dispatch threads to do the work in parallel
-    //     int offset_size = size / m_ncores;
-    //     int offset = 0;
-    //     auto a_data = a.data();
-    //     auto b_data = b.data();
-    //     auto res_data = res.data();
+    if (M_should_lanuch_threads(size)) 
+    {
+        // dispatch threads to do the work in parallel
+        int offset_size = size / m_ncores;
+        int offset = 0;
+        auto a_data = a.data();
+        auto b_data = b.data();
+        auto res_data = res.data();
 
-    //     for (int i = 0; i < m_ncores; i++, offset += offset_size) {
-    //         size_t patch_size = i == m_ncores - 1 ? size - offset : offset_size;
-    //         m_threads.push_back(
-    //             std::thread(
-    //                 func, a_data + offset, b_data + offset, 
-    //                 res_data + offset, patch_size, n, m
-    //             ));
-    //     }
+        for (int i = 0; i < m_ncores; i++, offset += offset_size) {
+            size_t patch_size = i == m_ncores - 1 ? size - offset : offset_size;
+            m_threads.push_back(
+                std::thread(
+                    func, a_data + offset, b_data + offset, 
+                    res_data + offset, patch_size, n, m
+                ));
+        }
 
-    //     M_join_threads();
-    // }
-    // else
+        M_join_threads();
+    }
+    else
         func(a.data(), b.data(), res.data(), size, n, m);
 
     return res;
