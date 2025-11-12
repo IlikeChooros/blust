@@ -2,6 +2,14 @@
 # Rework
 - [ ] Make tensor use `shared_data` object instead of simple variant
   with pointer and cuda pointer
+	- Make a 'handler' that will store both cuda and buffer holders
+	- Will make pointer calls through that object:
+    	- fill, bytesize
+  	- The 'holders' will actually implement these functions
+  	- The 'handler' will keep these objects as variant of shared pointers
+  	- The base 'holder' class may add field: bytesize
+
+
 - [ ] Make tensor a generic class (constrained to integral types (int, uint) and floating point types (fl32, fl16, fl64))
 - [ ] Remove dogshit 'backend' and 'matrix' code
 - [ ] Rewrite the 'mat_mul_test' to seprate folder (like bench, and use proper profiling)

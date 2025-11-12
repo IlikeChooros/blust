@@ -9,15 +9,12 @@ template <typename dtype>
 concept IsDType = std::is_floating_point_v<dtype> || std::is_same_v<dtype, CUdeviceptr>;
 
 template <IsDType dtype>
-class shared_data {
+class internal_tensor_data {
 public:
     typedef CUdeviceptr cu_pointer;
     typedef CUdeviceptr& cu_pointer_ref;
     typedef dtype* pointer;
     typedef const dtype* const_pointer;
-
-    typedef std::variant<cu_pointer, pointer> internal_data; 
-    enum class pointer_type { buffer = 1, cuda = 2 };
 
     static int n_allocs;
     static int max_allocs;
@@ -29,64 +26,37 @@ public:
     // Memory alignment
     static constexpr size_t alignment = 32;
 
-    /**
-     * @brief Get total size in bytes, with given alignment
-     */
-    template <size_t Alignment, typename dtype>
-    static constexpr size_t get_bytesize(size_t count) noexcept
-    {
-        return ((count * sizeof(dtype) + Alignment - 1) / Alignment ) * Alignment;
-    }
-
-    /**
-     * @brief Get total size in bytes
-     */
-    static constexpr size_t get_bytesize(size_t count) noexcept
-    {
-        return get_bytesize<alignment, dtype>(count);
-    }
-
-    /**
-     * @brief Allocates memory with given alignment and number of elements
-     */
-    template <size_t Alignment>
-    static inline pointer aligned_alloc(size_t count) noexcept
-    {
-        return static_cast<pointer>(std::aligned_alloc(Alignment, get_bytesize(count)));
-    }
-
-    /**
-     * @brief Allocate aligned memory with given number of lemenets
-     */
-    static inline pointer aligned_alloc(size_t count) noexcept
-    {
-        return aligned_alloc<alignment>(count);
-    }
-
-    // Free the aligned memory
-    static inline void aligned_free(pointer src) noexcept
-    {
-        std::free(src);
-    }
+    // bytesize getter
+protected:
+    size_t m_bytesize;
 };
 
 
 template <IsDType dtype>
-class heap_data {
+class tensor_buffer : public internal_tensor_data<dtype> {
+    
+    std::unique_ptr<dtype> m_data;
 public:
     typedef dtype* pointer;
 
-    heap_data(shape dim, dtype init) {
-        
+    heap_data(heap_data&& data) {
+        m_data = std::move(data.m_data);
     }
 
-    void build(shape dim, dtype init) {
-
+    heap_data(size_t count, dtype init) {
+        build(std::move(count), init);
     }
+
+    void build(size_t count, dtype init) {
+        m_data = utils::aligned_alloc<alignment, dtype>(count);
+        std::fill_n(m_data.get(), count, init);
+    }
+
+    // fill
 };
 
 template <IsDType dtype>
-class cu_data {
+class tensor_cuda_buffer : internal_tensor_data<dtype> {
 public:
     typedef CUdeviceptr cu_pointer;
 
