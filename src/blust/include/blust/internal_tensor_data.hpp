@@ -3,7 +3,7 @@
 #include <memory>
 #include <type_traits>
 
-#include "types.hpp"
+#include "base_types.hpp"
 
 
 START_BLUST_NAMESPACE
@@ -20,13 +20,6 @@ public:
     typedef dtype* pointer;
     typedef const dtype* const_pointer;
     typedef std::function<dtype> gen_fn;
-
-    static int n_allocs;
-    static int max_allocs;
-
-    static void inc_alloc(int n = 1) {
-        max_allocs = std::max(max_allocs, n_allocs += n); 
-    }
 
     // Memory alignment
     static constexpr size_t alignment = 32;
@@ -56,21 +49,22 @@ public:
     using typename internal_tensor_data<dtype>::pointer;
     using typename internal_tensor_data<dtype>::const_pointer;
     using typename internal_tensor_data<dtype>::gen_fn;
+    static constexpr auto alignment = internal_tensor_data<dtype>::alignment;
 
-    heap_data(size_t count, dtype init) {
-        m_size = count;
-        m_data = utils::aligned_alloc<alignment, dtype>(count);
-        m_bytesize = utils::get_bytesize<alignment, dtype>(count);
-        std::fill_n(m_data.get(), count, init);
+    tensor_buffer(size_t count, dtype init) {
+        this->m_size = count;
+        this->m_data = utils::aligned_alloc<alignment, dtype>(count);
+        this->m_size = utils::get_bytesize<alignment, dtype>(count);
+        std::fill_n(this->m_data.get(), count, init);
     }
 
 
     void fill(dtype init) {
-        std::fill_n(m_data.get(), m_size, init);
+        std::fill_n(m_data.get(), this->m_size, init);
     }
 
     void generate(gen_fn gen) {
-        std::generate_n(m_data.get(), m_size, gen);
+        std::generate_n(m_data.get(), this->m_size, gen);
     }
 };
 
@@ -80,7 +74,7 @@ public:
     using typename internal_tensor_data<dtype>::cu_pointer;
     using typename internal_tensor_data<dtype>::gen_fn;
 
-    cu_data(size_t count, dtype init) {
+    tensor_cuda_buffer(size_t count, dtype init) {
         // Create the data
     }
 

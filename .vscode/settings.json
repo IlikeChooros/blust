@@ -89,6 +89,9 @@
         "__string": "cpp",
         "regex": "cpp",
         "cfenv": "cpp",
-        "ios": "cpp"
+        "ios": "cpp",
+        "charconv": "cpp",
+        "span": "cpp",
+        "format": "cpp"
     },
 }

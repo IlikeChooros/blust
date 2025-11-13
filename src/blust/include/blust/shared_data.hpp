@@ -4,7 +4,7 @@
 #include <memory>
 #include <type_traits>
 
-#include "types.hpp"
+#include "base_types.hpp"
 #include "internal_tensor_data.hpp"
 
 START_BLUST_NAMESPACE
@@ -54,7 +54,7 @@ public:
     /**
      * @brief Fill internal buffer with given value
      */
-    void fill(dtype init) {
+    inline void fill(dtype init) {
         if (m_type == buffer_data) {
             std::get<shared_buffer_ptr>(m_data)->fill(init);
         } else {
@@ -65,15 +65,26 @@ public:
     /**
      * @brief Apply given generator to each element of the tensor
      */
-    void generate(std::function<dtype()> gen) {
+    inline void generate(std::function<dtype()> gen) {
         if (m_type == buffer_data) {
             std::get<shared_buffer_ptr>(m_data)->generate(gen);
         } else {
             std::get<shared_cu_ptr>(m_data)->generate(gen);
         }
     }
+
+    inline bool is_cuda() const {
+        return m_type == cuda_data;
+    }
+
+    internal_type type() const {
+        return m_type;
+    }
+
+    
+
 private:
-    variant_data m_data{shared_buffer_ptr<dtype>(nullptr)};
+    variant_data m_data{shared_buffer_ptr(nullptr)};
     internal_type m_type{buffer_data};
 };
 
