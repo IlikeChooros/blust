@@ -48,7 +48,7 @@ public:
     // Create a tensor with shared buffer with 't'
     static inline ops_tensor make_borrowed(ops_tensor& t)
     {
-        t.m_shared = true;
+        // t.m_shared = true;
         return ops_tensor(t.data(), t.layout());
     }    
 

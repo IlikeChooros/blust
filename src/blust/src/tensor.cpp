@@ -21,7 +21,7 @@ void tensor::M_print_tensor(
     // Got 1D representation
     if (rank == 1)
     {
-        auto data = std::get<pointer>(t.m_tensor);
+        auto data = t.data();
         out << '[';
         for (size_t i = 0; i < end; i++)
         {
@@ -53,53 +53,53 @@ void tensor::M_print_tensor(
         out << "]\n";
 }
 
-tensor& tensor::operator=(const tensor& t) noexcept
-{
-    M_cleanup_buffer();
-    auto count = M_alloc_buffer(t);
+// tensor& tensor::operator=(const tensor& t) noexcept
+// {
+    // M_cleanup_buffer();
+    // auto count = M_alloc_buffer(t);
 
-    if (count == 0)
-        return *this;
+    // if (count == 0)
+    //     return *this;
 
-    // If that's a cuda pointer, memcpy to this buffer
-    if (t.m_data_type == pointer_type::cuda && t.cu_data() != 0) {
-        cuMemcpyDtoH(
-            data(), t.cu_data(), 
-            count * sizeof(number_t));
-    }
-    else
-    {
-        std::copy_n(t.data(), count, data()); // will memcpy the buffer
-    }
+    // // If that's a cuda pointer, memcpy to this buffer
+    // if (t.m_data_type == pointer_type::device && t.cu_data() != 0) {
+    //     cuMemcpyDtoH(
+    //         data(), t.cu_data(), 
+    //         count * sizeof(number_t));
+    // }
+    // else
+    // {
+    //     std::copy_n(t.data(), count, data()); // will memcpy the buffer
+    // }
 
-    return *this;
-}
+//     return *this;
+// }
 
-tensor& tensor::operator=(tensor&& t) noexcept
-{
-    m_bytesize  = t.m_bytesize;
-    m_shape     = std::forward<shape>(t.m_shape);
-    m_data_type = pointer_type::buffer;
-    m_shared    = false; // since I'm getting the ownership of the pointer
+// tensor& tensor::operator=(tensor&& t) noexcept
+// {
+//     m_bytesize  = t.m_bytesize;
+//     m_shape     = std::forward<shape>(t.m_shape);
+//     m_data_type = pointer_type::host;
+//     m_shared    = false; // since I'm getting the ownership of the pointer
 
-    // If that's a cuda pointer, copy the buffer
-    if (t.m_data_type == pointer_type::cuda && std::holds_alternative<cu_pointer>(m_tensor))
-    {
-        const auto count    = size();
-        m_tensor            = aligned_alloc(count);
-        cuMemcpyDtoH(
-            data(), t.cu_data(), 
-            count * sizeof(number_t));
-    }
-    else
-    {
-        // Just release the buffer
-        M_cleanup_buffer();
-        m_tensor = t.release();
-    }
+//     // If that's a cuda pointer, copy the buffer
+//     if (t.m_data_type == pointer_type::device && std::holds_alternative<cu_pointer>(m_tensor))
+//     {
+//         const auto count    = size();
+//         m_tensor            = aligned_alloc(count);
+//         cuMemcpyDtoH(
+//             data(), t.cu_data(), 
+//             count * sizeof(number_t));
+//     }
+//     else
+//     {
+//         // Just release the buffer
+//         M_cleanup_buffer();
+//         m_tensor = t.release();
+//     }
 
-    return *this;
-}
+//     return *this;
+// }
 
 std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept
 {
@@ -108,7 +108,7 @@ std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept
     out << std::fixed;
 
     // print the buffer
-    if (t.m_data_type == tensor::pointer_type::buffer)
+    if (t.type() == tensor::pointer_type::host)
     {
         auto rank = t.rank();
         if (rank >= 1)
@@ -124,22 +124,22 @@ std::ostream& operator<<(std::ostream& out, const tensor& t) noexcept
  * data type to buffer, but DOES NOT COPY THE CONTENT of t's data
  * @returns t.size() (if 0 then buffer was not allocated and is set to `nullptr`)
  */
-inline size_t tensor::M_alloc_buffer(const tensor& t) noexcept
-{
-    const auto count    = t.size();
-    m_shape             = t.m_shape;
-    m_shared            = false;
-    m_data_type         = pointer_type::buffer; // always use buffer
-    m_tensor            = (pointer)nullptr;
-    m_bytesize          = 0;
+// inline size_t tensor::M_alloc_buffer(const tensor& t) noexcept
+// {
+//     const auto count    = t.size();
+//     m_shape             = t.m_shape;
+//     m_shared            = false;
+//     m_data_type         = pointer_type::host; // always use buffer
+//     m_tensor            = (pointer)nullptr;
+//     m_bytesize          = 0;
     
-    if (count == 0) 
-        return 0;
+//     if (count == 0) 
+//         return 0;
 
-    inc_alloc(1);
-    m_bytesize          = get_bytesize(count);
-    m_tensor            = aligned_alloc(count);
-    return count;
-}
+//     inc_alloc(1);
+//     m_bytesize          = get_bytesize(count);
+//     m_tensor            = aligned_alloc(count);
+//     return count;
+// }
 
 END_BLUST_NAMESPACE

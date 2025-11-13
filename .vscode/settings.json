@@ -92,6 +92,7 @@
         "ios": "cpp",
         "charconv": "cpp",
         "span": "cpp",
-        "format": "cpp"
+        "format": "cpp",
+        "__memory": "cpp"
     },
 }

@@ -5,6 +5,8 @@
 #include <vector>
 #include <ostream>
 
+#include <cuda.h>
+
 START_BLUST_NAMESPACE
 
 typedef float number_t;
