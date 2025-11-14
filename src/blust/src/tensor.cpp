@@ -3,9 +3,6 @@
 
 START_BLUST_NAMESPACE
 
-int tensor::n_allocs = 0;
-int tensor::max_allocs = 0;
-
 
 void tensor::M_print_tensor(
     const tensor& t, std::ostream& out, size_t rank, 

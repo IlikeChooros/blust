@@ -388,7 +388,8 @@ private:
     size_t m_cols;
 
     size_t M_get_buffer_size() const {
-        return tensor::get_bytesize<aligment,dtype>(m_rows*m_cols);
+        return 0;
+        // return tensor::get_bytesize<aligment,dtype>(m_rows*m_cols);
     }
 
     // Set the internal size and reallocate the buffer

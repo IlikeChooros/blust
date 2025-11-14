@@ -191,3 +191,16 @@ TEST(OpsTest, TensorSub) {
 TEST(OpsTest, TensorHadamardMul) {
     testVectorLike(MUL);
 }
+
+
+// Memory tests - check if the tensor properly handles buffer sharing
+// and avoid double free's
+TEST(OpsTest, TensorNestedOps) {
+    constexpr auto m = 512, n = 512, k = 512;
+    cpu_ops ops;
+
+    tensor t1({m, n}), t2({m, n}), t3({m, n}), t4({n, k});
+
+    auto r1 = ops.mat_mul(ops.add(t1, t2), t4);
+    auto r2 = ops.add(ops.add(t1, t2), ops.add(t2, t3));
+}

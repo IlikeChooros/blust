@@ -17,6 +17,7 @@ public:
     typedef CUdeviceptr& cu_pointer_ref;
     typedef dtype* pointer;
     typedef const dtype* const_pointer;
+    using base_ptr = internal_tensor_data<dtype>*;
     typedef std::shared_ptr<tensor_buffer<dtype>> shared_buffer_ptr;
     typedef std::shared_ptr<tensor_cuda_buffer<dtype>> shared_cu_ptr;
     typedef std::variant<shared_buffer_ptr, shared_cu_ptr> variant_data;
@@ -35,6 +36,10 @@ public:
         void(*this = std::forward<data_handler<dtype>>(other));
     }
 
+    ~data_handler() {
+        void(0);
+    }
+
     // Copies all conent of the `other` allocated memory
     data_handler<dtype>& operator=(const data_handler<dtype>& other) {
         // m_data = other.m_data;
@@ -51,7 +56,7 @@ public:
     }
 
     // Moves all other's conent into this object
-    data_handler<dtype>& operator=(data_handler<dtype>&& other) {
+    inline data_handler<dtype>& operator=(data_handler<dtype>&& other) {
         m_data = std::move(other.m_data);
         m_type = other.m_type;
         M_set_base_ptr();
@@ -95,6 +100,16 @@ public:
                 new tensor_buffer<dtype>(std::move(dim.total()), init));
         }
         M_set_base_ptr();
+    }
+
+    // Create new `data_handler` with shared internal data
+    inline data_handler make_shared() const noexcept {
+        // auto shared = data_handler();
+        // shared.m_data = this->m_data; // This makes the use of shared_ptr
+        // shared.m_type = this->m_type;
+        // shared.m_base_ptr = this->m_base_ptr;
+        // return std::forward<data_handler>(shared);
+        return data_handler(m_data, m_type, m_base_ptr);
     }
 
     /**
@@ -193,6 +208,11 @@ public:
 
 private:
 
+    // Create shared data_handler
+    data_handler(const variant_data& data, pointer_type type, base_ptr p) :
+        m_data(data), m_type(type), m_base_ptr(p) {
+            utils::inc_shared(1);
+        }
 
     void M_set_base_ptr() noexcept {
         if (std::holds_alternative<shared_buffer_ptr>(this->m_data)) {
@@ -204,7 +224,7 @@ private:
 
     variant_data m_data{shared_buffer_ptr{nullptr}};
     pointer_type m_type{pointer_type::host};
-    internal_tensor_data<dtype>* m_base_ptr{nullptr};
+    base_ptr m_base_ptr{nullptr};
 };
 
 END_BLUST_NAMESPACE

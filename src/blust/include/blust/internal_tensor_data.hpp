@@ -4,6 +4,7 @@
 #include <memory>
 #include <type_traits>
 
+#include "utils.hpp"
 #include "base_types.hpp"
 
 START_BLUST_NAMESPACE
@@ -44,8 +45,12 @@ protected:
 
 template <IsDType dtype>
 class tensor_buffer : public internal_tensor_data<dtype> {
-    std::unique_ptr<dtype> m_data{nullptr};
 public:
+    struct AlignedDeleter {
+        inline void operator()(dtype *p) { std::free(p); }
+    };
+
+    using unique_ptr = std::unique_ptr<dtype, AlignedDeleter>;
     using typename internal_tensor_data<dtype>::pointer;
     using typename internal_tensor_data<dtype>::const_pointer;
     using typename internal_tensor_data<dtype>::gen_fn;
@@ -53,6 +58,7 @@ public:
 
     // Construct new buffer
     tensor_buffer(size_t count, dtype init) {
+        utils::inc_allocs(1);
         this->m_size = count;
         this->m_data.reset(utils::aligned_alloc<alignment, dtype>(count));
         this->m_bytesize = utils::get_bytesize<alignment, dtype>(count);
@@ -70,10 +76,15 @@ public:
     // Copy all data from given pointer
     explicit
     tensor_buffer(const_pointer data, size_t count) {
+        utils::inc_allocs(1);
         this->m_size = count;
         this->m_bytesize = utils::get_bytesize<alignment, dtype>(count);
         this->m_data.reset(utils::aligned_alloc<alignment, dtype>(count));
         std::copy_n(data, this->m_size, m_data.get());
+    }
+
+    ~tensor_buffer() {
+        // utils::inc_allocs(-1);
     }
 
     tensor_buffer* clone() {
@@ -107,6 +118,8 @@ public:
     pointer release() noexcept {
         return m_data.release();
     }
+private:
+    unique_ptr m_data{nullptr};
 };
 
 template <IsDType dtype>

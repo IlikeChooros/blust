@@ -65,35 +65,13 @@ double test_mat_mul(number_t* a_data, number_t* b_data, number_t* c_data)
 	return total;
 }
 
-void tensor_mul_test(int argc, char** argv) {
-	if (argc == 4) {
-		std::cout << "Custom args\n";
-		int a[3] = {};
-		bool ok = true;
-		for (int i = 0; i < 3; i++) {
-			int scanned = sscanf(argv[i+1], "%d", &a[i]);
-			if (scanned == 0) {
-				std::cout << argv[i+1] << " is not a valid dim\n";
-				ok = false;
-				break;
-			}
-		}
-
-		if (ok) {
-			m = a[0];
-			n = a[1];
-			k = a[2];
-
-			std::cout << "Using m=" << m 
-					  << " n=" << n 
-					  << " k=" << k << '\n';
-		}
-	}
-
+void tensor_mul_test() {
 	size_t bytes_size;
 
 	tensor t1({m, n}, 2);
-	tensor t2({n, k}, 2);
+	tensor t2({m, n}, 2);
+	tensor t3({n, k}, 2);
+	tensor t4({n, k}, 2);
 
 	bytes_size = t1.bytesize() + t2.bytesize();
 
@@ -122,6 +100,8 @@ void tensor_mul_test(int argc, char** argv) {
 		std::uniform_real_distribution<number_t> dist{0, 1};
 		t1.fill([&dist, &gen](){ return dist(gen); });
 		t2.fill([&dist, &gen](){ return dist(gen); });
+		t3.fill([&dist, &gen](){ return dist(gen); });
+		t4.fill([&dist, &gen](){ return dist(gen); });
 	}
 
 	std::cout.setf(std::ios::fixed);
@@ -132,7 +112,7 @@ void tensor_mul_test(int argc, char** argv) {
 	auto start = high_resolution_clock::now();
 	constexpr size_t n_iter = 5;
 	for (i = 0; i < n_iter; i++)
-		r = ops->mat_mul(t1, t2);
+		r = ops->mat_mul(ops->add(t1, t2), ops->add(t3, t4));
 
 	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / n_iter;
 	gflops  = gflops / (seconds) / 1e9;
@@ -143,13 +123,17 @@ void tensor_mul_test(int argc, char** argv) {
 	std::cout 
 		<< "time=" << seconds
 			<< "s gflops="<< gflops 
-			<< " n_allocs=" << tensor::n_allocs 
-			<< " max_allocs=" << tensor::max_allocs
+			<< " n_allocs=" << utils::n_allocs
+			<< " max_allocs=" << utils::max_allocs
+			<< " n_shared=" << utils::n_shared
+			<< " max_shared=" << utils::max_shared
 			<< "\n";
 	
 	std::cout << "Testing result...\n";
 
-	auto naiveSeconds = test_mat_mul(t1.data(), t2.data(), r.data());
+
+	auto T1 = ops->add(t1, t2), T2 = ops->add(t3, t4);
+	auto naiveSeconds = test_mat_mul(T1.data(), T2.data(), r.data());
 	std::cout << "Naive time: " << naiveSeconds << "s\n";
 	std::cout << "Speedup: " << naiveSeconds / seconds << "x\n";
 
@@ -163,6 +147,8 @@ void tesor_add_test() {
 
 	tensor t1({m * m});
 	tensor t2({m * m});
+	tensor t3({m * m});
+	tensor t4({m * m});
 
 	bytes_size = t1.bytesize() + t2.bytesize();
 
@@ -187,6 +173,8 @@ void tesor_add_test() {
 		std::uniform_real_distribution<number_t> dist{0, 1};
 		t1.fill([&dist, &gen](){ return dist(gen); });
 		t2.fill([&dist, &gen](){ return dist(gen); });
+		t3.fill([&dist, &gen](){ return dist(gen); });
+		t4.fill([&dist, &gen](){ return dist(gen); });
 	}
 
 	std::cout.setf(std::ios::fixed);
@@ -197,7 +185,7 @@ void tesor_add_test() {
 	auto start = high_resolution_clock::now();
 	constexpr size_t n_iter = 5;
 	for (i = 0; i < n_iter; i++)
-		r = ops->add(t1, t2);
+		r = ops->add(ops->add(t1, t2), ops->add(t3, t4));
 
 	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / n_iter;
 	gflops  = gflops / (seconds) / 1e9;
@@ -208,13 +196,16 @@ void tesor_add_test() {
 	std::cout 
 		<< "time=" << seconds
 			<< "s gflops="<< gflops 
-			<< " n_allocs=" << tensor::n_allocs 
-			<< " max_allocs=" << tensor::max_allocs
+			<< " n_allocs=" << utils::n_allocs
+			<< " max_allocs=" << utils::max_allocs
+			<< " n_shared=" << utils::n_shared
+			<< " max_shared=" << utils::max_shared
 			<< "\n";
 	
 	std::cout << "Testing result...\n";
 
-	auto naiveSeconds = test_result(t1.data(), t2.data(), r.data(), r.size());
+	auto T1 = ops->add(t1, t2), T2 = ops->add(t3, t4);
+	auto naiveSeconds = test_result(T1.data(), T2.data(), r.data(), r.size());
 	std::cout << "Naive time: " << naiveSeconds << "s\n";
 	std::cout << "Speedup: " << naiveSeconds / seconds << "x\n";
 
@@ -331,8 +322,6 @@ void matrix_mul_test() {
 	std::cout 
 		<< "time=" << seconds
 			<< "s gflops="<< gflops 
-			<< " n_allocs=" << tensor::n_allocs 
-			<< " max_allocs=" << tensor::max_allocs
 			<< "\n";
 	
 	std::cout << "Testing result...\n";
@@ -351,7 +340,32 @@ int main(int argc, char** argv)
     init(argc, argv, "cpu");
 
 	printf("Tensor:\n");
-	tensor_mul_test(argc, argv);
-	// tesor_add_test();
+
+	if (argc == 4) {
+		std::cout << "Custom args\n";
+		int a[3] = {};
+		bool ok = true;
+		for (int i = 0; i < 3; i++) {
+			int scanned = sscanf(argv[i+1], "%d", &a[i]);
+			if (scanned == 0) {
+				std::cout << argv[i+1] << " is not a valid dim\n";
+				ok = false;
+				break;
+			}
+		}
+
+		if (ok) {
+			m = a[0];
+			n = a[1];
+			k = a[2];
+
+			std::cout << "Using m=" << m 
+					  << " n=" << n 
+					  << " k=" << k << '\n';
+		}
+	}
+
+	// tensor_mul_test();
+	tesor_add_test();
 	// modelTest();
 }

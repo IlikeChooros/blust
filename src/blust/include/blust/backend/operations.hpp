@@ -24,11 +24,12 @@ class ops_tensor : public tensor
     // then borrow their buffer, else create tensor with newly allocated memory
     static inline ops_tensor M_get_vector_like(ops_tensor& a, ops_tensor& b) noexcept
     {
+        // If a or b is in operation, create a shared result buffer
         if (a.in_operation()) 
-            return make_borrowed(a);
+            return ops_tensor(a.m_handler, a.m_shape);
 
         if (b.in_operation()) 
-            return make_borrowed(b);
+            return ops_tensor(b.m_handler, b.m_shape);
         
         return ops_tensor(a.layout());
     }
@@ -36,21 +37,6 @@ class ops_tensor : public tensor
 public:
 
     friend class cpu_ops;
-
-    // Get the ops tensor from a tensor
-    static ops_tensor get(tensor&& t)
-    {
-        if (t.is_cuda())
-            return ops_tensor(t.cu_release(), t.layout());
-        return ops_tensor(t.release(), t.layout()); // idk if i should do that
-    }
-
-    // Create a tensor with shared buffer with 't'
-    static inline ops_tensor make_borrowed(ops_tensor& t)
-    {
-        // t.m_shared = true;
-        return ops_tensor(t.data(), t.layout());
-    }    
 
     ops_tensor() = default;
 
@@ -100,7 +86,9 @@ public:
     // Get the released pointer
     ops_tensor(const shape& dim, number_t init = 0.0) : tensor(dim, init) {}
     ops_tensor(tensor::cu_pointer cu_ptr, shape dim) : tensor(cu_ptr, dim) {}
-    ops_tensor(tensor::pointer data, shape dim) : tensor(data, dim) {}
+
+    // Make shared tensor
+    ops_tensor(data_handler<number_t>& handler, shape& dim) : tensor(handler, dim) {}
 
     // Return wheter the tensor is in stacked operation
     inline bool in_operation() const noexcept { return m_in_operation; }

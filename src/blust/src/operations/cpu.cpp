@@ -25,9 +25,9 @@ Need to read more about it
 
 START_BLUST_NAMESPACE
 
-typedef operations::tensor_t tensor_t;
-typedef tensor_t::pointer pointer;
-typedef operations::tensor_rref_t tensor_rref_t;
+using tensor_t = operations::tensor_t;
+using pointer = tensor_t::pointer;
+using tensor_rref_t = operations::tensor_rref_t;
 
 typedef union {
     __m128 v;
@@ -96,7 +96,7 @@ void cpu_ops::M_impl_hadamard(
     assume_aligned(b_data);
     assume_aligned(c_data);
 
-    #pragma omp parallel for
+    // #pragma omp parallel for
     for (size_t i = 0; i < size; i++) {
         c_data[i] = a_data[i] * b_data[i];
     }
@@ -637,37 +637,6 @@ void add_kernel_dot_4x4(
     *M(c, ldc, 3, 3) += c33;
 }
 
-void M_tiled_multiply(
-    size_t m, size_t n, size_t k, pointer __restrict a, 
-    pointer __restrict b, pointer __restrict c, 
-    size_t lda, size_t ldb, size_t ldc
-) noexcept
-{
-    // Should be sqrt(M), where M is size of the cache in bytes,
-    // choosing 256*256 = 65356 as default
-    constexpr auto tile_size = 256;
-    
-    // nxm, mxp
-    for (int I = 0; I < m; I += tile_size) {
-        for (int J = 0; J < k; J += tile_size) {
-            for (int K = 0; K < n; K += tile_size) {
-                
-                // Multiply A(I:I+T, K:K+T) * B(K:K+T, J:J+T) = C(I:I+T, J:J+T)
-                for (int i = I; i < std::min(I+tile_size, int(m)); i++) {
-                    for (int j = J; j < std::min(J+tile_size, int(k)); j++) {
-                        number_t sum = 0;
-
-                        for (int l = K; l < std::min(K+tile_size, int(n)); l++) {
-                            sum += *M(a, lda, i, l) * *M(b, ldb, l, j);
-                        }
-                        *M(c, ldc, i, j) = sum;
-                    }
-                }
-            }
-        }
-    }
-}
-
 void packRowMajor(number_t* pack, number_t* A, size_t m, size_t n, size_t lda) {
     // Assumes m * n is a multiple of 32
     // number_t* pack = utils::aligned_alloc<32, number_t>(m * n);
@@ -683,7 +652,7 @@ void packRowMajor(number_t* pack, number_t* A, size_t m, size_t n, size_t lda) {
 // dimensions are: A: m x n, B: n x k, C: m x k, 
 // in standard case lda = n, ldb = k, ldc = k
 // 
-// kernel calculates mini matrix multiplication (using 4x4 size)
+// kernel calculates mini matrix multiplication (using kernel_r x kernel_c size)
 template <size_t kernel_r, size_t kernel_c>
 void cpu_ops::M_inner_kernel(
     size_t m, size_t n, size_t k, pointer __restrict A, 
@@ -694,15 +663,7 @@ void cpu_ops::M_inner_kernel(
     func_scalar_kernel_t kernel_Nx1
 ) noexcept
 {
-    constexpr auto MR = kernel_r, NR = kernel_c;
-
-    // number_t* aPacked = utils::aligned_alloc<32, number_t>(MC * NC);
-    // number_t* bPacked = utils::aligned_alloc<32, number_t>(NC * KC);
-
-    // utils::print_matrix(A, m, n);
-    // utils::print_matrix(B, n, k);
-    // utils::print_matrix(C, m, k);
-    
+    constexpr auto MR = kernel_r, NR = kernel_c;    
 
     for (size_t K0 = 0; K0 < k; K0 += KC) {
         const size_t kc = std::min(KC, k - K0);
@@ -711,9 +672,6 @@ void cpu_ops::M_inner_kernel(
 
             // Pack B(N0:N0+nc, K0:K0+kc) into bPacked
             packRowMajor(bPacked, &B[N0 * ldb + K0], nc, kc, ldb);
-
-            // std::cout << "BBB: ";
-            // utils::print_matrix(bPacked, nc, kc);
 
             for (size_t M0 = 0; M0 < m; M0 += MC) {
                 size_t mc = std::min(MC, m - M0);
@@ -724,9 +682,6 @@ void cpu_ops::M_inner_kernel(
                 if (M0 + MC < m) {
                     _mm_prefetch((const char*)&A[(M0 + MC) * lda + N0], _MM_HINT_T2);
                 }
-
-                // std::cout << "AAA: ";
-                // utils::print_matrix(aPacked, mc, nc);
 
                 // If mc is not a multiple of MR, we must 
                 // handle the rest of the rows, same for kc
@@ -750,11 +705,8 @@ void cpu_ops::M_inner_kernel(
                             a_sub, b_sub, c_sub,
                             nc, nc, kc, ldc
                         );
-
-                        // utils::print_matrix(C, m, k);
                     }
 
-                    // Handle rest of the columns with 4x1 kernel
                     for (size_t j = kc_main; j < kc; j++) {
                         kernel_Nx1(
                             &aPacked[ir * nc + 0],
@@ -785,15 +737,9 @@ void cpu_ops::M_inner_kernel(
                         C[(M0 + i) * ldc + (j + K0)] += sum;
                     }
                 }
-
-                // Handle rest of the rows with 1x4 kernel
-                // and handle the remaining corner block with naive impl
             }
         }
     }
-
-    // std::free(aPacked);
-    // std::free(bPacked);
 }
 
 // I know this is pointless, since if the cpu doesn't support avx2,
@@ -837,7 +783,8 @@ inline tensor_t cpu_ops::M_get_res_tensor(tensor_t& a, tensor_t& b)
     // Try to borrow buffers, to avoid redundand memory allocation
     tensor_t res = ops_tensor::M_get_vector_like(a, b);
 
-    // if in chained operation, will use that fact in the function above
+    // if in chained operation, will use that fact 
+    // in next 'operation' this tensor is used
     res.set_in_operation(true); 
     return res;
 }
