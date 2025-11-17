@@ -13,8 +13,6 @@ START_BLUST_NAMESPACE
 
 class cpu_ops : public operations
 {
-    friend class cpu_backend;
-
     typedef tensor_t::pointer pointer;
     typedef void(*func_vector_t)(pointer, pointer, pointer, size_t, number_t, number_t);
     typedef void(*func_kernel_dot_t)(

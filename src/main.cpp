@@ -80,7 +80,7 @@ void tensor_mul_test() {
 	// for each result Cij = Dot(Aix, Bxj) x from 0 to m
 	// dot has 2 operations: +, * so we get total of n * k * [Dot(Aix, Bxj) x from 0 to m] operations
 	// and that is n * k * (2m) = 2nkm
-	double gflops = 2 * n * m * k;
+	double gflops = 2 * n * m * k + n * m + m * k;
 	double seconds;
 	
 	tensor r;
@@ -109,8 +109,11 @@ void tensor_mul_test() {
 	std::cout << "Size: " << bytes_size / 1e6 << "MB\n";
 	std::cout << "Starting...\n";
 
-	auto start = high_resolution_clock::now();
 	constexpr size_t n_iter = 5;
+	for (i = 0; i < n_iter; i++)
+		r = ops->mat_mul(ops->add(t1, t2), ops->add(t3, t4));
+
+	auto start = high_resolution_clock::now();
 	for (i = 0; i < n_iter; i++)
 		r = ops->mat_mul(ops->add(t1, t2), ops->add(t3, t4));
 
@@ -298,6 +301,7 @@ int main(int argc, char** argv)
 		}
 	}
 
+	// std::cout << ENABLE_CUDA_BACKEND << std::endl;
 	tensor_mul_test();
 	// tesor_add_test();
 	// modelTest();

@@ -295,7 +295,7 @@ void cpu_ops::M_inner_kernel(
 
             for (size_t M0 = 0; M0 < m; M0 += MC) {
                 size_t mc = std::min(MC, m - M0);
-        
+
                 // Pack A(M0:M0+mc, N0:N0+nc) to aPacked
                 packRowMajor(aPacked, &A[M0 * lda + N0], mc, nc, lda);
 
@@ -412,8 +412,13 @@ inline tensor_t cpu_ops::M_perform_vector_like(
 {
     BLUST_ASSERT(a.dim()==b.dim());
 
-    auto res = M_get_res_tensor(a, b);
-    // calculate the result
+    tensor_t res;
+    if (allocate) {
+        res = M_get_res_tensor(a, b);
+    } else {
+        // Share buffer with a
+        res.M_borrow(a);
+    }
 
     const auto size = res.size();
     if (M_should_lanuch_threads(size)) 
@@ -538,7 +543,19 @@ inline void transpose_block_SSE4x4(float *A, float *B, const int n, const int m,
 
 tensor_rref_t cpu_ops::transpose(tensor_t a)
 {
-    return a;
+    const size_t n_rows = a.dim()[0];
+    const size_t n_cols = a.dim()[1];
+
+    auto res = ops_tensor({n_cols, n_rows});
+
+    transpose_block_SSE4x4(
+        a.data(), res.data(),
+        n_rows, n_cols,
+        n_cols, n_rows,
+        64
+    );
+
+    return std::move(res);
 }
 
 END_BLUST_NAMESPACE

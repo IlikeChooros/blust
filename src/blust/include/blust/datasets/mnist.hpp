@@ -1,5 +1,8 @@
 #pragma once
 
+#include <filesystem>
+#include <fstream>
+
 #include <blust/types.hpp>
 #include <blust/settings.hpp>
 #include <blust/utils.hpp>

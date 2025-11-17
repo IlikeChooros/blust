@@ -1,6 +1,7 @@
 #pragma once
 
 #include <blust/types.hpp>
+#include <blust/backend/operations.hpp>
 #include "decay.hpp"
 
 START_BLUST_NAMESPACE

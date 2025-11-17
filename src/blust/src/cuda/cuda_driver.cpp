@@ -1,5 +1,9 @@
 #include <blust/backend/cuda_driver.hpp>
 
+
+
+#if ENABLE_CUDA_BACKEND
+
 START_BLUST_NAMESPACE
 
 cuda_backend::cuda_backend(int argc, char ** argv)
@@ -279,5 +283,6 @@ void cuda_backend::M_run_test() {
     /*exit((i == N) ? EXIT_SUCCESS : EXIT_FAILURE);*/
 }
 
-
 END_BLUST_NAMESPACE
+#endif // ENABLE_CUDA_BACKEND
+

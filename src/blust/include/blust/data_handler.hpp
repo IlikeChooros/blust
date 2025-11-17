@@ -104,11 +104,6 @@ public:
 
     // Create new `data_handler` with shared internal data
     inline data_handler make_shared() const noexcept {
-        // auto shared = data_handler();
-        // shared.m_data = this->m_data; // This makes the use of shared_ptr
-        // shared.m_type = this->m_type;
-        // shared.m_base_ptr = this->m_base_ptr;
-        // return std::forward<data_handler>(shared);
         return data_handler(m_data, m_type, m_base_ptr);
     }
 

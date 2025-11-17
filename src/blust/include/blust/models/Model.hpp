@@ -1,5 +1,7 @@
 #pragma once
 
+
+#include <blust/error.hpp>
 #include <blust/layers/BaseLayer.hpp>
 #include <blust/layers/Input.hpp>
 #include <blust/optimizers/all_opt.hpp>

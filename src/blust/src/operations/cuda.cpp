@@ -1,5 +1,8 @@
 #include <blust/backend/cuda_ops.hpp>
 
+
+#if ENABLE_CUDA_BACKEND
+
 START_BLUST_NAMESPACE
 
 typedef operations::tensor_rref_t tensor_rref_t;
@@ -34,20 +37,14 @@ tensor_rref_t cuda_ops::mul(tensor_t a, number_t b, bool allocate)
 /**
  * @brief Calculate Ri = Ai / b
  */
-tensor_rref_t cuda_ops::div(tensor_t a, number_t b, bool allocate) 
-{
+tensor_rref_t cuda_ops::div(tensor_t a, number_t b, bool allocate) {
     return a;
-    // return M_perform_vector_like(a, a, 1 / b, 0.0, M_impl_add, allocate);
 }
 
 /**
  * @brief Get the hadamard product: Ci = Ai * Bi
  */
-tensor_rref_t cuda_ops::hadamard(tensor_t a, tensor_t b, bool allocate)
-{
-    return a;
-    // return M_perform_vector_like(a, b, 0, 0, M_impl_hadamard, allocate);
-}
+tensor_rref_t cuda_ops::hadamard(tensor_t a, tensor_t b, bool allocate) { return a; }
 
 /**
  * @brief Perform matrix multiplication, and return the result
@@ -55,24 +52,10 @@ tensor_rref_t cuda_ops::hadamard(tensor_t a, tensor_t b, bool allocate)
  * @param b the second matrix, with dimensions n x k and in a column-major order
  * @return the result matrix, with dimensions m x k and in a column-major order
  */
-tensor_rref_t cuda_ops::mat_mul(tensor_t a, tensor_t b)
-{
-    M_assert_tensor_dim_mat_mul(a, b);
-
-    const size_t m_rows = a.dim()[0];
-    const size_t n_cols = a.dim()[1];
-    const size_t k_cols = b.dim()[1];
-
-    auto res = ops_tensor({m_rows, k_cols});
-    
-    // M_impl_matumul<cpu_ops::matmul_type::see>(
-    //     a.data(), n_cols,
-    //     b.data(), k_cols,
-    //     res.data(), k_cols,
-    //     m_rows, n_cols, k_cols
-    // );
-
-    return std::move(res);
+tensor_rref_t cuda_ops::mat_mul(tensor_t a, tensor_t b) {
+    return a;
 }
 
 END_BLUST_NAMESPACE
+
+#endif // ENABLE_CUDA_BACKEND

@@ -5,7 +5,9 @@
 #include <vector>
 #include <ostream>
 
-#include <cuda.h>
+#if ENABLE_CUDA_BACKEND
+#   include <cuda.h>
+#endif
 
 START_BLUST_NAMESPACE
 
@@ -13,6 +15,10 @@ typedef float number_t;
 typedef number_t* npointer_t;
 typedef const number_t* const_npointer_t;
 typedef std::vector<number_t> vector_t;
+
+#if !defined(ENABLE_CUDA_BACKEND) || (ENABLE_CUDA_BACKEND == 0)
+    typedef unsigned int CUdeviceptr;
+#endif
 
 /**
  * ## Activation types

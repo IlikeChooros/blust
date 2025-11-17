@@ -46,6 +46,7 @@ private:
 		tensor_t& /*velocity*/, tensor_t& grad, tensor_t& w, number_t learning_rate, number_t /*momentum*/
 	)
 	{
+		ops->sub(w, ops->mul(grad, learning_rate), false);
 		// w -= learning_rate * grad;
 	}
 

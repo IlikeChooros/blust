@@ -41,6 +41,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <cuda.h>
 #include "helper_string.h"
 
 #ifndef EXIT_WAIVED
@@ -586,8 +587,8 @@ template <typename T>
 void check(T result, char const *const func, const char *const file,
            int const line) {
   if (result) {
-    fprintf(stderr, "CUDA error at %s:%d code=%d(%s) \"%s\" \n", file, line,
-            static_cast<unsigned int>(result), _cudaGetErrorEnum(result), func);
+    // fprintf(stderr, "CUDA error at %s:%d code=%d(%s) \"%s\" \n", file, line,
+    //         static_cast<unsigned int>(result), _cudaGetErrorEnum(result), func);
     exit(EXIT_FAILURE);
   }
 }

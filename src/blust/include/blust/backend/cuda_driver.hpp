@@ -1,20 +1,21 @@
 #pragma once
 
 #include <blust/macros.hpp>
+#include <blust/namespaces.hpp>
 
 #if ENABLE_CUDA_BACKEND
-
-#include <blust/backend/base_backend.hpp>
 
 #include <cuda.h>
 #include "helper_cuda.h"
 #include "helper_cuda_drvapi.h"
 #include <cmath>
 
+#include "operations.hpp"
+
 START_BLUST_NAMESPACE
 
 // Cuda backend for matrix operations, only 1 backend can be used at a time
-class cuda_backend : public base_memory_backend
+class cuda_backend
 {
 	bool m_available = false;
 
@@ -113,52 +114,52 @@ public:
 	// Reserve memory for the given size (on 3 buffers)
 	// If this is the maximum size of all buffers that will be used
 	// then this will be the only memory allocation on the GPU
-	void reserve(size_t size_bytes) override;
+	void reserve(size_t size_bytes);
 
 	// Return the name of the backend 'cuda'
-	const char* get_name() override { return "cuda"; }
+	const char* get_name() { return "cuda"; }
 
-	void relu(npointer_t input, npointer_t result, size_t n) override;
-	void sigmoid(npointer_t input, npointer_t result, size_t n) override;
-	void softmax(npointer_t input, npointer_t result, size_t n) override;
+	void relu(npointer_t input, npointer_t result, size_t n);
+	void sigmoid(npointer_t input, npointer_t result, size_t n);
+	void softmax(npointer_t input, npointer_t result, size_t n);
 
-	void none(npointer_t input, npointer_t result, size_t n) override {
+	void none(npointer_t input, npointer_t result, size_t n) {
 		memcpy(result, input, n * sizeof(number_t));
 	}
 
 	void backprop_dense_output(
 		number_t *outputs, number_t *expected, activations act_type,
-		number_t *parial_deriv, shape2D output_shape, size_t n_batch) override;
+		number_t *parial_deriv, shape2D output_shape, size_t n_batch);
 
 	void backprop_hidden_dense(
 		number_t *d_weights, number_t *d_biases, activations act_type,
 		number_t *d_prev_activations, number_t *weights, number_t *inputs,
 		number_t *prev_d_activations, number_t *prev_weights,
 		size_t n_weights, size_t n_prev_activations,
-		size_t n_inputs, size_t n_batch) override;
+		size_t n_inputs, size_t n_batch);
 
 	// Add `mat1` and `mat2` and store the result in `res` (Rij = M1ij + M2ij)
-	void vector_add(number_t* res, number_t* mat1, number_t* mat2, size_t N) override
+	void vector_add(number_t* res, number_t* mat1, number_t* mat2, size_t N)
 	{
 		M_launch_vector_like_kernel(res, mat1, mat2, N, cu_vector_add);
 	}
 
 	// Subtract `mat2` from `mat1` and store the result in `res` (Rij = M1ij - M2ij)
-	void vector_sub(number_t* res, number_t* mat1, number_t* mat2, size_t N) override
+	void vector_sub(number_t* res, number_t* mat1, number_t* mat2, size_t N)
 	{
 		M_launch_vector_like_kernel(res, mat1, mat2, N, cu_vector_sub);
 	}
 
 	// Multiply `mat1` and `mat2` element wise and store the result in `res` (Rij = M1ij * M2ij)
-	void vector_mul_hadamard(number_t* res, number_t* mat1, number_t* mat2, size_t N) override
+	void vector_mul_hadamard(number_t* res, number_t* mat1, number_t* mat2, size_t N)
 	{
 		M_launch_vector_like_kernel(res, mat1, mat2, N, cu_vector_mul_hadamard);
 	}
 
 	// Multiply the matrix by a scalar (Rij = Mij * scalar)
-	void vector_scalar_mul(number_t* res, number_t* mat, number_t scalar, size_t N) override;
-	void mat_transpose(number_t* res, number_t* mat, size_t rows, size_t cols) override;
-	void mat_mul(number_t* res, number_t* mat1, number_t* mat2, size_t rows1, size_t cols2, size_t rows2) override;
+	void vector_scalar_mul(number_t* res, number_t* mat, number_t scalar, size_t N);
+	void mat_transpose(number_t* res, number_t* mat, size_t rows, size_t cols);
+	void mat_mul(number_t* res, number_t* mat1, number_t* mat2, size_t rows1, size_t cols2, size_t rows2);
 };
 
 END_BLUST_NAMESPACE
