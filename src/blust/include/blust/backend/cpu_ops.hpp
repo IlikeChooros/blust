@@ -24,6 +24,11 @@ class cpu_ops : public operations
         pointer __restrict, size_t, size_t, size_t, size_t
     );
 
+    typedef void(*func_result_kernel_add_t)(
+        const pointer __restrict kernel, pointer __restrict C, 
+        size_t ldc
+    );
+
     // Preformns c = a * n + b * m
     static void M_impl_add(
         pointer a, pointer b, pointer c, 
@@ -40,19 +45,18 @@ class cpu_ops : public operations
         size_t m, size_t n, size_t k, pointer __restrict a, 
         pointer __restrict b, pointer __restrict c, 
         size_t lda, size_t ldb, size_t ldc, 
+        size_t MC, size_t NC, size_t KC,
         func_kernel_dot_t kernel,
         func_scalar_kernel_t kernel_1xN,
         func_scalar_kernel_t kernel_Nx1
     ) noexcept(true);
 
-    enum class matmul_type { avx2, see };
-
-    template <matmul_type type = matmul_type::avx2>
     void M_impl_matumul(
         pointer __restrict a, size_t lda, 
         pointer __restrict b, size_t ldb,
         pointer __restrict c, size_t ldc,
-        size_t n, size_t m, size_t k
+        size_t n, size_t m, size_t k,
+        size_t MC, size_t NC, size_t KC
     ) noexcept(true);
 
     // Calls M_add with these parameters
@@ -68,6 +72,9 @@ class cpu_ops : public operations
         return m_ncores > 1 && size > 5e5;
     }
 
+    void M_realloc_packed(size_t MC, size_t KC, size_t NC) noexcept;
+
+
     // Joins all the threads
     inline void M_join_threads() noexcept
     {
@@ -77,12 +84,11 @@ class cpu_ops : public operations
     }
 
     int m_ncores{1};
+    size_t M_MC{0}, M_KC{0}, M_NC{0};
     std::vector<std::thread> m_threads;
-    number_t *aPacked{nullptr}, *bPacked{nullptr};
+    number_t *m_aPacked{nullptr}, *m_bPacked{nullptr};
 
 public:
-    static constexpr size_t MC = 128, NC = 128, KC = 256; // L2 cache blocking
-
     cpu_ops(int n_threads = 1);
     ~cpu_ops();
 
@@ -92,7 +98,10 @@ public:
     tensor_rref_t div(tensor_t, number_t, bool allocate = true) override;
 
     tensor_rref_t hadamard(tensor_t, tensor_t, bool allocate = true) override;
-    tensor_rref_t mat_mul(tensor_t, tensor_t) override;
+    tensor_rref_t mat_mul(tensor_t, tensor_t, size_t MC, size_t KC, size_t NC);
+    inline tensor_rref_t mat_mul(tensor_t a, tensor_t b) override {
+        return mat_mul(std::forward<tensor_t>(a), std::forward<tensor_t>(b), M_MC, M_KC, M_NC); 
+    }
     tensor_rref_t transpose(tensor_t) override;
 };
 

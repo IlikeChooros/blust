@@ -51,16 +51,14 @@ constexpr void assume_aligned(pointer data)
 }
 
 // C'tor
-cpu_ops::cpu_ops(int nthreads) : m_ncores(std::max<int>(1, nthreads)) 
-{
-    aPacked = utils::aligned_alloc<32, number_t>(MC * NC);
-    bPacked = utils::aligned_alloc<32, number_t>(NC * KC);
+cpu_ops::cpu_ops(int nthreads) : m_ncores(std::max<int>(1, nthreads)) {
+    M_realloc_packed(64, 128, 1024);
 }
 
 cpu_ops::~cpu_ops() 
 {
-    std::free(aPacked);
-    std::free(bPacked);
+    std::free(m_aPacked);
+    std::free(m_bPacked);
 }
 
 /**
@@ -112,9 +110,9 @@ void add_kernel_dot_8x8(
     size_t lda, size_t ldb, size_t ldc
 ) noexcept
 {
-    assume_aligned(a);
-    assume_aligned(b);
-    assume_aligned(c);
+    // assume_aligned(a);
+    // assume_aligned(b);
+    // assume_aligned(c);
 
     vec8f_t 
         va0, va1, va2, va3, va4, va5, va6, va7,
@@ -257,102 +255,126 @@ void scalar_kernel_1x8(
         _mm256_add_ps(_mm256_loadu_ps(M(c, ldc, 0, 0)), vc.v));
 }
 
-void packRowMajor(number_t* pack, number_t* A, size_t m, size_t n, size_t lda) {
+void packAPanels(number_t* __restrict pack, const number_t* __restrict A,
+    size_t m, size_t k, size_t lda) {
     // Assumes m * n is a multiple of 32
     // number_t* pack = utils::aligned_alloc<32, number_t>(m * n);
+    const size_t kc_main = (m / 8) * 8;
+    size_t i, j;
+
+    for (i = 0; i < m; i++) {
+        for (j = 0; j < kc_main; j += 8) {
+            // Load 8 elements from A
+            vec8f_t va;
+            va.v = _mm256_loadu_ps(&A[i * lda + j]);
+
+            // Store them in packed format
+            _mm256_storeu_ps(pack, va.v);
+            pack += 8;
+        }
+
+        // Handle the remaining columns
+        for (; j < k; j++) {
+            *pack++ = A[i * lda + j];
+        }
+    }
+}
+
+void packRowMajor(number_t* pack, const number_t* A, size_t m, size_t k, size_t lda) {
     for (size_t i = 0; i < m; i++) {
-        for (size_t j = 0; j < n; j++) {
-            pack[i * n + j] = A[i * lda + j];
-            // *pack++ = A[i * lda + j]
+        for (size_t j = 0; j < k; j++) {
+            // pack[i * k + j] = A[i * lda + j];
+            *pack++ = A[i * lda + j];
         }
     }
 }
 
 // Calculates C = A * B, where each matrix is row-major and 
-// dimensions are: A: m x n, B: n x k, C: m x k, 
-// in standard case lda = n, ldb = k, ldc = k
+// dimensions are: A: m x k, B: k x n, C: m x n, 
+// in standard case lda = k, ldb = n, ldc = n
 // 
-// kernel calculates mini matrix multiplication (using kernel_r x kernel_c size)
-template <size_t kernel_r, size_t kernel_c>
+// kernel calculates mini matrix multiplication (using kernelM x kernelN size)
+template <size_t kernelM, size_t kernelN>
 void cpu_ops::M_inner_kernel(
-    size_t m, size_t n, size_t k, pointer __restrict A, 
+    size_t m, size_t k, size_t n, pointer __restrict A, 
     pointer __restrict B, pointer __restrict C, 
-    size_t lda, size_t ldb, size_t ldc, 
+    size_t lda, size_t ldb, size_t ldc,
+    size_t MC, size_t KC, size_t NC,
     cpu_ops::func_kernel_dot_t kernel,
     func_scalar_kernel_t kernel_1xN,
     func_scalar_kernel_t kernel_Nx1
 ) noexcept
 {
-    constexpr auto MR = kernel_r, NR = kernel_c;    
+    constexpr auto MR = kernelM, NR = kernelN;
 
-    for (size_t K0 = 0; K0 < k; K0 += KC) {
-        const size_t kc = std::min(KC, k - K0);
-        for (size_t N0 = 0; N0 < n; N0 += NC) {
-            const size_t nc = std::min(NC, n - N0);
+    for (size_t N0 = 0; N0 < n; N0 += NC) {
+        const size_t nc = std::min(NC, n - N0);
+        for (size_t K0 = 0; K0 < k; K0 += KC) {
+            const size_t kc = std::min(KC, k - K0);
 
-            // Pack B(N0:N0+nc, K0:K0+kc) into bPacked
-            packRowMajor(bPacked, &B[N0 * ldb + K0], nc, kc, ldb);
+            // Pack B(K0:K0+kc, N0:N0+nc) into bPacked
+            packAPanels(m_bPacked, &B[K0 * ldb + N0], kc, nc, ldb);
 
             for (size_t M0 = 0; M0 < m; M0 += MC) {
                 size_t mc = std::min(MC, m - M0);
 
-                // Pack A(M0:M0+mc, N0:N0+nc) to aPacked
-                packRowMajor(aPacked, &A[M0 * lda + N0], mc, nc, lda);
+                // Pack A(M0:M0+mc, K0:K0+kc) to Packed
+                packAPanels(m_aPacked, &A[M0 * lda + K0], mc, kc, lda);
 
                 if (M0 + MC < m) {
-                    _mm_prefetch((const char*)&A[(M0 + MC) * lda + N0], _MM_HINT_T1);
+                    _mm_prefetch((const char*)&A[(M0 + MC) * lda + K0], _MM_HINT_T0);
                 }
 
                 // If mc is not a multiple of MR, we must 
                 // handle the rest of the rows, same for kc
                 // so this simply get the 'multiple of MR' part from mc
                 const size_t mc_main = (mc / MR) * MR;
-                const size_t kc_main = (kc / NR) * NR;
+                const size_t nc_main = (nc / NR) * NR;
 
                  // Multiply A(M0:M0+mc, N0:N0+nc) * B(N0:N0+nc, K0:K0+kc) = C(M0:M0+mc, K0:K0+kc)
                 for (size_t ir = 0; ir < mc_main; ir += MR) {
-                    for (size_t jr = 0; jr < kc_main; jr += NR) {
+                    for (size_t jr = 0; jr < nc_main; jr += NR) {
                         
-                        // submatrix of a(M0:M0+mc, N0:N0+nc), lda_sub = nc
-                        pointer a_sub = &aPacked[ir * nc + 0];
-                        // submatrix of b(N0:N0+nc, K0:K0+kc), ldb_sub = kc
-                        pointer b_sub = &bPacked[0 * kc + jr];
+                        // submatrix of a(M0:M0+mc, K0:K0+kc), lda_sub = kc
+                        pointer a_sub = &m_aPacked[ir * kc + 0];
+                        // submatrix of b(K0:K0+kc, N0:N0+nc), ldb_sub = nc
+                        pointer b_sub = &m_bPacked[0 * nc + jr];
                         // c matrix
-                        pointer c_sub = &C[jr + K0 + (M0 + ir) * ldc];
+                        pointer c_sub = &C[jr + N0 + (M0 + ir) * ldc];
 
-                        // n (inner-product lenght) is nc
+                        // n (inner-product length) is nc
                         kernel(
                             a_sub, b_sub, c_sub,
-                            nc, nc, kc, ldc
+                            kc, kc, nc, ldc
                         );
                     }
 
-                    for (size_t j = kc_main; j < kc; j++) {
+                    for (size_t j = nc_main; j < nc; j++) {
                         kernel_Nx1(
-                            &aPacked[ir * nc + 0],
-                            &bPacked[0 * kc + j],
-                            &C[j + K0 + (M0 + ir) * ldc],
-                            nc, nc, kc, ldc
+                            &m_aPacked[ir * kc + 0],
+                            &m_bPacked[0 * nc + j],
+                            &C[j + N0 + (M0 + ir) * ldc],
+                            kc, kc, nc, ldc
                         );
                     }
                 }
 
                 // Bottom-edge
                 for (size_t i = mc_main; i < mc; i++) {
-                    for (size_t jr = 0; jr < kc_main; jr+=NR) {
+                    for (size_t jr = 0; jr < nc_main; jr+=NR) {
                         kernel_1xN(
-                            &aPacked[i * nc + 0],
-                            &bPacked[0 * kc + jr],
-                            &C[jr + K0 + (M0 + i) * ldc],
-                            nc, nc, kc, ldc
+                            &m_aPacked[i * kc + 0],
+                            &m_bPacked[0 * nc + jr],
+                            &C[jr + N0 + (M0 + i) * ldc],
+                            kc, kc, nc, ldc
                         );
                     }
 
                     // Corner
-                    for (size_t j = kc_main; j < kc; j++) {
+                    for (size_t j = nc_main; j < nc; j++) {
                         number_t sum = 0;
-                        for (size_t p = 0; p < nc; p++) {
-                            sum += aPacked[i * nc + p] * bPacked[p * kc + j];
+                        for (size_t p = 0; p < kc; p++) {
+                            sum += m_aPacked[i * kc + p] * m_bPacked[p * nc + j];
                         }
                         C[(M0 + i) * ldc + (j + K0)] += sum;
                     }
@@ -364,20 +386,46 @@ void cpu_ops::M_inner_kernel(
 
 // I know this is pointless, since if the cpu doesn't support avx2,
 // it won't compile (i think), but I want to keep the code clean
-template <cpu_ops::matmul_type type>
 void cpu_ops::M_impl_matumul(
     pointer __restrict a, size_t lda, 
     pointer __restrict b, size_t ldb,
     pointer __restrict c, size_t ldc,
-    size_t m, size_t n, size_t k
+    size_t m, size_t k, size_t n,
+    size_t MC, size_t KC, size_t NC
 ) noexcept
 {
+    M_realloc_packed(MC, KC, NC);
+
     M_inner_kernel<8, 8>(
-        m, n, k, a, b, c, lda, ldb, ldc, 
+        m, k, n, 
+        a, b, c, 
+        lda, ldb, ldc,
+        MC, KC, NC,
         add_kernel_dot_8x8, 
         scalar_kernel_1x8,
         scalar_kernel_8x1
     );
+}
+
+void cpu_ops::M_realloc_packed(size_t MC, size_t KC, size_t NC) noexcept
+{
+    if (M_MC == MC && M_KC == KC && M_NC == NC)
+        return;
+
+    // A different size, reallocate
+    if (M_MC != MC || M_KC != KC) {
+        if (m_aPacked) std::free(m_aPacked);
+        m_aPacked = utils::aligned_alloc<32, number_t>(MC * KC);
+    }
+
+    if (M_NC != NC || M_KC != KC) {
+        if (m_bPacked) std::free(m_bPacked);
+        m_bPacked = utils::aligned_alloc<32, number_t>(KC * NC);
+    }
+
+    M_MC = MC;
+    M_KC = KC;
+    M_NC = NC;
 }
 
 
@@ -493,21 +541,22 @@ tensor_rref_t cpu_ops::hadamard(tensor_t a, tensor_t b, bool allocate)
  * @param b the second matrix, with dimensions n x k and in a column-major order
  * @return the result matrix, with dimensions m x k and in a column-major order
  */
-tensor_rref_t cpu_ops::mat_mul(tensor_t a, tensor_t b)
+tensor_rref_t cpu_ops::mat_mul(tensor_t a, tensor_t b, size_t MC, size_t KC, size_t NC)
 {
     M_assert_tensor_dim_mat_mul(a, b);
 
-    const size_t m_rows = a.dim()[0];
-    const size_t n_cols = a.dim()[1];
-    const size_t k_cols = b.dim()[1];
+    const size_t m = a.dim()[0];
+    const size_t k = a.dim()[1];
+    const size_t n = b.dim()[1];
 
-    auto res = ops_tensor({m_rows, k_cols});
-    
-    M_impl_matumul<cpu_ops::matmul_type::see>(
-        a.data(), n_cols,
-        b.data(), k_cols,
-        res.data(), k_cols,
-        m_rows, n_cols, k_cols
+    auto res = ops_tensor({m, n});
+
+    M_impl_matumul(
+        a.data(), k,
+        b.data(), n,
+        res.data(), n,
+        m, k, n,
+        M_MC, M_KC, M_NC
     );
 
     return std::move(res);

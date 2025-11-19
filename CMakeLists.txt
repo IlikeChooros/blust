@@ -26,8 +26,8 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 
-make_directory(${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+make_directory(${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Download gtest
 include(FetchContent)
@@ -85,13 +85,13 @@ if (USE_CUDA_BACKEND)
 endif()
 
 install(TARGETS ${PROJECT_NAME})
-# include(CTest)
+include(CTest)
 
 # Tests
-# enable_testing()
-# add_subdirectory(tests)
+enable_testing()
+add_subdirectory(tests)
 
 
 
 # Benchmarking
-# add_subdirectory(bench)
+add_subdirectory(bench)

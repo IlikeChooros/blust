@@ -42,6 +42,7 @@
 #include <string.h>
 
 #include <cuda.h>
+#include <cuda_runtime_api.h>
 #include "helper_string.h"
 
 #ifndef EXIT_WAIVED
@@ -55,7 +56,8 @@
 // CUDA Runtime error messages
 #ifdef __DRIVER_TYPES_H__
 static const char *_cudaGetErrorEnum(cudaError_t error) {
-  return cudaGetErrorName(error);
+  // return cudaGetErrorName(error);
+  return "Err";
 }
 #endif
 

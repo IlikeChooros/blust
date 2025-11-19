@@ -2,7 +2,7 @@
 #include <chrono>
 #include <iostream>
 
-size_t m = 1024, n = 1024, k = 1024;
+size_t m = 4096, n = 4096, k = 4096;
 
 using namespace blust;
 
@@ -80,7 +80,7 @@ void tensor_mul_test() {
 	// for each result Cij = Dot(Aix, Bxj) x from 0 to m
 	// dot has 2 operations: +, * so we get total of n * k * [Dot(Aix, Bxj) x from 0 to m] operations
 	// and that is n * k * (2m) = 2nkm
-	double gflops = 2 * n * m * k + n * m + m * k;
+	const double FLOPS = 2 * n * m * k + n * m + m * k;
 	double seconds;
 	
 	tensor r;
@@ -109,33 +109,53 @@ void tensor_mul_test() {
 	std::cout << "Size: " << bytes_size / 1e6 << "MB\n";
 	std::cout << "Starting...\n";
 
-	constexpr size_t n_iter = 5;
-	for (i = 0; i < n_iter; i++)
-		r = ops->mat_mul(ops->add(t1, t2), ops->add(t3, t4));
+	cpu_ops cops(std::thread::hardware_concurrency());
 
-	auto start = high_resolution_clock::now();
-	for (i = 0; i < n_iter; i++)
-		r = ops->mat_mul(ops->add(t1, t2), ops->add(t3, t4));
+	constexpr size_t n_iter = 2;
+	for (auto mc : {64, 96, 128, 192, 256}) {
+		for (auto kc : {96, 128, 192, 256, 384, 512, 1024}) {
+			for (auto nc : {512, 1024, 2048, 4096}) {
+				// Warm up
+				r = cops.mat_mul(cops.add(t1, t2), cops.add(t3, t4), mc, kc, nc);
 
-	seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / n_iter;
-	gflops  = gflops / (seconds) / 1e9;
+				auto start = high_resolution_clock::now();
+				for (i = 0; i < n_iter; i++)
+					r = cops.mat_mul(cops.add(t1, t2), cops.add(t3, t4), mc, kc, nc);
+				seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / n_iter;
+				auto gflops  = FLOPS / (seconds) / 1e9;
 
-	if (n < MAX_PRINT_DIM && m < MAX_PRINT_DIM && k < MAX_PRINT_DIM)
-		std::cout << r << '\n';
+				std::cout 
+					<< "MC=" << mc << " KC=" << kc << " NC=" << nc
+					<< " time=" << seconds
+					<< "s gflops="<< gflops 
+					<< "\n";
+			}
+		}
+	}
 
-	std::cout 
-		<< "time=" << seconds
-			<< "s gflops="<< gflops 
-			<< " n_allocs=" << utils::n_allocs
-			<< " max_allocs=" << utils::max_allocs
-			<< " n_shared=" << utils::n_shared
-			<< " max_shared=" << utils::max_shared
-			<< "\n";
+	// auto start = high_resolution_clock::now();
+	// for (i = 0; i < n_iter; i++)
+	// 	r = cops.mat_mul(cops.add(t1, t2), cops.add(t3, t4));
+
+	// seconds = duration_cast<microseconds>(high_resolution_clock::now() - start).count() / 1e6 / n_iter;
+	// auto gflops  = FLOPS / (seconds) / 1e9;
+
+	// if (n < MAX_PRINT_DIM && m < MAX_PRINT_DIM && k < MAX_PRINT_DIM)
+	// 	std::cout << r << '\n';
+
+	// std::cout 
+	// 	<< "time=" << seconds
+	// 		<< "s gflops="<< gflops 
+	// 		<< " n_allocs=" << utils::n_allocs
+	// 		<< " max_allocs=" << utils::max_allocs
+	// 		<< " n_shared=" << utils::n_shared
+	// 		<< " max_shared=" << utils::max_shared
+	// 		<< "\n";
 	
 	std::cout << "Testing result...\n";
 
 
-	auto T1 = ops->add(t1, t2), T2 = ops->add(t3, t4);
+	auto T1 = cops.add(t1, t2), T2 = cops.add(t3, t4);
 	auto naiveSeconds = test_mat_mul(T1.data(), T2.data(), r.data());
 	std::cout << "Naive time: " << naiveSeconds << "s\n";
 	std::cout << "Speedup: " << naiveSeconds / seconds << "x\n";
@@ -271,6 +291,11 @@ void modelTest() {
 	printf("avg time: %f ms\n", duration.count() / 10.0f);*/
 }
 
+void perf_mat_mul(tensor_t& a, tensor_t& b) {
+	tensor_t r;
+	r = ops->mat_mul(a, b);
+}
+
 int main(int argc, char** argv)
 {
     init(argc, argv, "cpu");
@@ -301,8 +326,20 @@ int main(int argc, char** argv)
 		}
 	}
 
+	tensor_t t1({m, n});
+	tensor_t t2({n, k});
+	utils::randomize(t1.begin(), t1.end(), t1.size());
+	utils::randomize(t2.begin(), t2.end(), t2.size());
+	perf_mat_mul(t1, t2);
+
+	std::cout 
+			<< " n_allocs=" << utils::n_allocs
+			<< " max_allocs=" << utils::max_allocs
+			<< " n_shared=" << utils::n_shared
+			<< " max_shared=" << utils::max_shared
+			<< "\n";
 	// std::cout << ENABLE_CUDA_BACKEND << std::endl;
-	tensor_mul_test();
+	// tensor_mul_test();
 	// tesor_add_test();
 	// modelTest();
 }
